@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>ChromaChess — Modern Colorful Chess</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-theme="ocean">
+  <div class="bg-orb orb-1" aria-hidden="true"></div>
+  <div class="bg-orb orb-2" aria-hidden="true"></div>
+  <div class="bg-orb orb-3" aria-hidden="true"></div>
+
+  <div class="app-shell">
+    <!-- Header / Top Bar -->
+    <header class="top-bar">
+      <div class="brand">
+        <div class="brand-logo" aria-hidden="true">♛</div>
+        <div>
+          <h1>ChromaChess</h1>
+          <p class="brand-sub">Modern Strategy &bull; Play Solo or Local 2P</p>
+        </div>
+      </div>
+
+      <div class="controls-bar">
+        <!-- Mode Selector -->
+        <div class="segmented-control" role="group" aria-label="Game Mode">
+          <button type="button" class="seg-btn active" data-mode="ai" id="btn-mode-ai">
+            <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg>
+            vs Computer
+          </button>
+          <button type="button" class="seg-btn" data-mode="pvp" id="btn-mode-pvp">
+            <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            2 Players
+          </button>
+        </div>
+
+        <!-- 2P Connection Mode (Visible in 2 Players mode) -->
+        <div class="pvp-type-group hidden" id="pvp-type-group" role="group" aria-label="2 Player Mode">
+          <span class="control-label">Play Mode</span>
+          <div class="segmented-control compact">
+            <button type="button" class="seg-btn active" data-pvp-type="offline" id="btn-pvp-offline">
+              <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+              Offline
+            </button>
+            <button type="button" class="seg-btn" data-pvp-type="online" id="btn-pvp-online">
+              <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+              Online
+            </button>
+          </div>
+        </div>
+
+        <!-- Difficulty Selector (Visible in AI mode) -->
+        <div class="difficulty-group" id="difficulty-group" role="group" aria-label="AI Difficulty">
+          <span class="control-label">Difficulty</span>
+          <div class="segmented-control compact">
+            <button type="button" class="seg-btn" data-diff="easy">Easy</button>
+            <button type="button" class="seg-btn active" data-diff="medium">Medium</button>
+            <button type="button" class="seg-btn" data-diff="hard">Hard</button>
+          </div>
+        </div>
+
+        <!-- Theme Swatches -->
+        <div class="theme-group" role="group" aria-label="Board Theme">
+          <span class="control-label">Theme</span>
+          <div class="swatch-list">
+            <button type="button" class="swatch active" data-theme="ocean" title="Neon Ocean" aria-label="Neon Ocean theme"></button>
+            <button type="button" class="swatch" data-theme="sunset" title="Sunset Coral" aria-label="Sunset Coral theme"></button>
+            <button type="button" class="swatch" data-theme="emerald" title="Emerald Forest" aria-label="Emerald Forest theme"></button>
+            <button type="button" class="swatch" data-theme="violet" title="Royal Violet" aria-label="Royal Violet theme"></button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="game-layout">
+      <!-- Left / Center: Board Stage -->
+      <section class="board-stage" aria-label="Chessboard">
+        <!-- Top Player Bar -->
+        <div class="player-bar" id="top-player-bar">
+          <div class="player-identity">
+            <span class="player-avatar black-avatar" id="top-avatar">♚</span>
+            <div>
+              <div class="player-name" id="top-player-name">Computer (Medium)</div>
+              <div class="player-meta" id="top-player-meta">Black</div>
+            </div>
+          </div>
+          <div class="captured-strip" id="top-captured" aria-label="Captured pieces"></div>
+          <div class="turn-pill" id="top-turn-pill">Thinking...</div>
+        </div>
+
+        <!-- Board Frame -->
+        <div class="board-frame">
+          <div class="chessboard" id="chessboard" role="grid" aria-label="8 by 8 chessboard"></div>
+
+          <!-- Pawn Promotion Modal -->
+          <div class="modal-overlay hidden" id="promotion-modal" role="dialog" aria-modal="true" aria-label="Choose promotion piece">
+            <div class="modal-card promo-card">
+              <h3>Promote Pawn</h3>
+              <p>Select a piece to replace your pawn</p>
+              <div class="promo-options" id="promo-options"></div>
+            </div>
+          </div>
+
+          <!-- Game Over Overlay -->
+          <div class="modal-overlay hidden" id="gameover-modal" role="dialog" aria-modal="true" aria-label="Game Over">
+            <div class="modal-card gameover-card">
+              <div class="gameover-badge" id="gameover-badge">
+                <svg class="ui-icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+              </div>
+              <h2 id="gameover-title">Checkmate!</h2>
+              <p id="gameover-subtitle">White wins the game.</p>
+              <div class="modal-actions">
+                <button type="button" class="btn-primary" id="btn-play-again">Play Again</button>
+                <button type="button" class="btn-secondary" id="btn-review-board">Inspect Board</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom Player Bar -->
+        <div class="player-bar" id="bottom-player-bar">
+          <div class="player-identity">
+            <span class="player-avatar white-avatar" id="bottom-avatar">♔</span>
+            <div>
+              <div class="player-name" id="bottom-player-name">You</div>
+              <div class="player-meta" id="bottom-player-meta">White</div>
+            </div>
+          </div>
+          <div class="captured-strip" id="bottom-captured" aria-label="Captured pieces"></div>
+          <div class="turn-pill active" id="bottom-turn-pill">Your Turn</div>
+        </div>
+      </section>
+
+      <!-- Right: Info & Controls Panel -->
+      <aside class="side-panel">
+        <!-- Status Card -->
+        <div class="panel-card status-card">
+          <div class="status-header">
+            <span class="status-dot" id="status-dot"></span>
+            <span class="status-title" id="status-title">White to Move</span>
+          </div>
+          <p class="status-detail" id="status-detail">Select a piece or drag to make your opening move.</p>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="panel-card actions-card">
+          <button type="button" class="action-btn primary" id="btn-new-game">
+            <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+            New Game
+          </button>
+          <button type="button" class="action-btn" id="btn-undo">
+            <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
+            Undo
+          </button>
+          <button type="button" class="action-btn" id="btn-flip">
+            <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+            Flip Board
+          </button>
+          <button type="button" class="action-btn" id="btn-sound" aria-pressed="true">
+            <span id="sound-icon" class="icon-wrap"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg></span>
+            <span id="sound-label">Sound On</span>
+          </button>
+        </div>
+
+        <!-- AI Side Switcher (shown in AI mode) -->
+        <div class="panel-card side-choice-card" id="side-choice-card">
+          <span class="panel-heading">Play As</span>
+          <div class="segmented-control compact full-width" role="group" aria-label="Choose your color">
+            <button type="button" class="seg-btn active" data-side="w" id="btn-side-w">♔ White</button>
+            <button type="button" class="seg-btn" data-side="b" id="btn-side-b">♚ Black</button>
+          </div>
+        </div>
+
+        <!-- Online Multiplayer Room Card (shown in 2P Online mode) -->
+        <div class="panel-card online-card hidden" id="online-card">
+          <div class="online-header">
+            <span class="panel-heading">Online Room</span>
+            <span class="conn-badge" id="conn-badge">Offline</span>
+          </div>
+
+          <div class="online-host-box" id="online-setup-view">
+            <button type="button" class="action-btn primary full-btn" id="btn-host-game">
+              <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/><line x1="15" y1="13" x2="15.01" y2="13"/><line x1="18" y1="11" x2="18.01" y2="11"/><rect x="2" y="6" width="20" height="12" rx="2"/></svg>
+              Create Game ID
+            </button>
+            <div class="online-divider"><span>or join a friend</span></div>
+            <div class="join-row">
+              <input
+                type="text"
+                id="input-game-id"
+                class="game-id-input"
+                placeholder="Enter Game ID"
+                maxlength="12"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <button type="button" class="action-btn join-btn" id="btn-join-game">Join</button>
+            </div>
+          </div>
+
+          <div class="online-active-box hidden" id="online-active-view">
+            <div class="room-id-display">
+              <div>
+                <div class="room-id-label">Game ID</div>
+                <div class="room-id-code" id="display-game-id">------</div>
+              </div>
+              <div class="room-id-actions">
+                <button type="button" class="icon-mini-btn" id="btn-copy-id" title="Copy Game ID" aria-label="Copy Game ID">
+                  <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                </button>
+              </div>
+            </div>
+            <p class="online-hint" id="online-hint">Share this Game ID with your friend.</p>
+            <button type="button" class="action-btn leave-btn" id="btn-leave-room">Leave Room</button>
+          </div>
+        </div>
+
+        <!-- Move History -->
+        <div class="panel-card history-card">
+          <div class="history-header">
+            <span class="panel-heading">Move History</span>
+            <span class="move-count" id="move-count">0 moves</span>
+          </div>
+          <div class="move-list" id="move-list">
+            <div class="empty-history">No moves yet. Let’s play!</div>
+          </div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <script defer src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script defer src="js/pieces.js"></script>
+  <script defer src="js/sound.js"></script>
+  <script defer src="js/engine.js"></script>
+  <script defer src="js/ai.js"></script>
+  <script defer src="js/online.js"></script>
+  <script defer src="js/app.js"></script>
+</body>
+</html>

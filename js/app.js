@@ -1,0 +1,742 @@
+/**
+ * ChromaChess UI Controller
+ * Manages board rendering, drag-and-drop / click-to-move, themes,
+ * single-player AI turns, 2-player local multiplayer, promotion, and history.
+ */
+(function () {
+  const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+  const RANKS = ['8', '7', '6', '5', '4', '3', '2', '1'];
+  const PIECE_MAT_VAL = { P: 1, N: 3, B: 3, R: 5, Q: 9, K: 0 };
+
+  const engine = new window.ChessEngine();
+
+  const state = {
+    mode: 'ai',          // 'ai' | 'pvp'
+    pvpType: 'offline',  // 'offline' | 'online'
+    difficulty: 'medium', // 'easy' | 'medium' | 'hard'
+    humanColor: 'w',      // 'w' | 'b' (used in AI mode)
+    onlineColor: 'w',     // 'w' | 'b' (used in 2P online mode)
+    onlineConnected: false,
+    flipped: false,
+    selected: null,       // { r, c }
+    legalForSelected: [],
+    lastMove: null,       // { fromR, fromC, toR, toC }
+    pendingPromotion: null, // { fromR, fromC, toR, toC }
+    aiThinking: false,
+    gameOver: false,
+    aiTimer: null
+  };
+
+  // DOM Elements
+  const boardEl = document.getElementById('chessboard');
+  const difficultyGroup = document.getElementById('difficulty-group');
+  const pvpTypeGroup = document.getElementById('pvp-type-group');
+  const sideChoiceCard = document.getElementById('side-choice-card');
+  const onlineCard = document.getElementById('online-card');
+  const connBadge = document.getElementById('conn-badge');
+  const onlineSetupView = document.getElementById('online-setup-view');
+  const onlineActiveView = document.getElementById('online-active-view');
+  const displayGameId = document.getElementById('display-game-id');
+  const onlineHint = document.getElementById('online-hint');
+  const inputGameId = document.getElementById('input-game-id');
+  const promoModal = document.getElementById('promotion-modal');
+  const promoOptions = document.getElementById('promo-options');
+  const gameoverModal = document.getElementById('gameover-modal');
+  const gameoverBadge = document.getElementById('gameover-badge');
+  const gameoverTitle = document.getElementById('gameover-title');
+  const gameoverSubtitle = document.getElementById('gameover-subtitle');
+
+  const topNameEl = document.getElementById('top-player-name');
+  const topMetaEl = document.getElementById('top-player-meta');
+  const topAvatarEl = document.getElementById('top-avatar');
+  const topCapturedEl = document.getElementById('top-captured');
+  const topTurnPill = document.getElementById('top-turn-pill');
+
+  const bottomNameEl = document.getElementById('bottom-player-name');
+  const bottomMetaEl = document.getElementById('bottom-player-meta');
+  const bottomAvatarEl = document.getElementById('bottom-avatar');
+  const bottomCapturedEl = document.getElementById('bottom-captured');
+  const bottomTurnPill = document.getElementById('bottom-turn-pill');
+
+  const statusDot = document.getElementById('status-dot');
+  const statusTitle = document.getElementById('status-title');
+  const statusDetail = document.getElementById('status-detail');
+  const moveListEl = document.getElementById('move-list');
+  const moveCountEl = document.getElementById('move-count');
+
+  const btnUndo = document.getElementById('btn-undo');
+  const btnSound = document.getElementById('btn-sound');
+  const soundIcon = document.getElementById('sound-icon');
+  const soundLabel = document.getElementById('sound-label');
+
+  function isHumanTurn() {
+    if (state.gameOver || state.aiThinking || state.pendingPromotion) return false;
+    if (state.mode === 'pvp') {
+      if (state.pvpType === 'online') {
+        return state.onlineConnected && engine.turn === state.onlineColor;
+      }
+      return true;
+    }
+    return engine.turn === state.humanColor;
+  }
+
+  function startNewGame(fromRemote = false) {
+    if (state.aiTimer) {
+      clearTimeout(state.aiTimer);
+      state.aiTimer = null;
+    }
+    engine.reset();
+    state.selected = null;
+    state.legalForSelected = [];
+    state.lastMove = null;
+    state.pendingPromotion = null;
+    state.aiThinking = false;
+    state.gameOver = false;
+    if (state.mode === 'ai') {
+      state.flipped = state.humanColor === 'b';
+    } else if (state.mode === 'pvp' && state.pvpType === 'online') {
+      state.flipped = state.onlineColor === 'b';
+    } else {
+      state.flipped = false;
+    }
+
+    if (!fromRemote && state.mode === 'pvp' && state.pvpType === 'online' && state.onlineConnected) {
+      online.send({ type: 'new_game' });
+    }
+
+    promoModal.classList.add('hidden');
+    gameoverModal.classList.add('hidden');
+    renderAll();
+    maybeTriggerAI();
+  }
+
+  function maybeTriggerAI() {
+    if (state.mode !== 'ai' || state.gameOver) return;
+    if (engine.turn === state.humanColor) return;
+
+    state.aiThinking = true;
+    updatePlayerBars();
+    updateStatusPanel();
+
+    const delay = state.difficulty === 'hard' ? 280 : 220;
+    state.aiTimer = setTimeout(() => {
+      state.aiTimer = null;
+      const bestMove = window.ChessAI.chooseBestMove(engine, state.difficulty);
+      state.aiThinking = false;
+      if (bestMove) {
+        executeMove(bestMove);
+      }
+    }, delay);
+  }
+
+  function executeMove(move, fromRemote = false) {
+    const entry = engine.makeMove(move);
+    if (!entry) return;
+
+    if (!fromRemote && state.mode === 'pvp' && state.pvpType === 'online' && state.onlineConnected) {
+      online.send({ type: 'move', move });
+    }
+
+    state.selected = null;
+    state.legalForSelected = [];
+    state.lastMove = {
+      fromR: move.fromR,
+      fromC: move.fromC,
+      toR: move.toR,
+      toC: move.toC
+    };
+
+    const status = engine.getGameStatus();
+    if (status.state !== 'playing') {
+      window.ChessSound.playGameOver();
+    } else if (status.inCheck) {
+      window.ChessSound.playCheck();
+    } else if (move.castle) {
+      window.ChessSound.playCastle();
+    } else if (entry.captured) {
+      window.ChessSound.playCapture();
+    } else {
+      window.ChessSound.playMove();
+    }
+
+    renderAll();
+
+    if (status.state !== 'playing') {
+      handleGameOver(status);
+    } else {
+      maybeTriggerAI();
+    }
+  }
+
+  const ICON_TROPHY = `<svg class="ui-icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>`;
+  const ICON_BOT = `<svg class="ui-icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg>`;
+  const ICON_DRAW = `<svg class="ui-icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>`;
+  const ICON_SOUND_ON = `<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>`;
+  const ICON_SOUND_OFF = `<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`;
+
+  function handleGameOver(status) {
+    state.gameOver = true;
+    if (status.state === 'checkmate') {
+      const winnerName =
+        state.mode === 'ai'
+          ? status.winner === state.humanColor
+            ? 'You Win!'
+            : 'Computer Wins!'
+          : status.winner === 'w'
+          ? 'White Wins!'
+          : 'Black Wins!';
+      gameoverBadge.innerHTML = status.winner === state.humanColor || state.mode === 'pvp' ? ICON_TROPHY : ICON_BOT;
+      gameoverTitle.textContent = 'Checkmate!';
+      gameoverSubtitle.textContent = `${winnerName} (${status.winner === 'w' ? 'White' : 'Black'} delivered mate)`;
+    } else {
+      gameoverBadge.innerHTML = ICON_DRAW;
+      gameoverTitle.textContent = status.reason;
+      gameoverSubtitle.textContent = 'The game ended in a draw.';
+    }
+    gameoverModal.classList.remove('hidden');
+    updateStatusPanel();
+  }
+
+  function tryMoveTo(toR, toC) {
+    const matching = state.legalForSelected.filter((m) => m.toR === toR && m.toC === toC);
+    if (matching.length === 0) return false;
+
+    const promoMoves = matching.filter((m) => m.promotion);
+    if (promoMoves.length > 0) {
+      state.pendingPromotion = {
+        fromR: matching[0].fromR,
+        fromC: matching[0].fromC,
+        toR,
+        toC,
+        color: engine.turn
+      };
+      showPromotionModal(engine.turn);
+      return true;
+    }
+
+    executeMove(matching[0]);
+    return true;
+  }
+
+  function showPromotionModal(color) {
+    promoOptions.innerHTML = '';
+    ['Q', 'R', 'B', 'N'].forEach((type) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'promo-btn';
+      btn.setAttribute('aria-label', `Promote to ${type}`);
+      btn.innerHTML = window.ChessPieces.getPieceSvg(color, type);
+      btn.addEventListener('click', () => {
+        const pending = state.pendingPromotion;
+        state.pendingPromotion = null;
+        promoModal.classList.add('hidden');
+        if (pending) {
+          executeMove({
+            fromR: pending.fromR,
+            fromC: pending.fromC,
+            toR: pending.toR,
+            toC: pending.toC,
+            promotion: type
+          });
+        }
+      });
+      promoOptions.appendChild(btn);
+    });
+    promoModal.classList.remove('hidden');
+  }
+
+  function handleSquareClick(r, c) {
+    if (!isHumanTurn()) return;
+
+    // If a piece is selected and user clicks a legal destination
+    if (state.selected) {
+      if (state.selected.r === r && state.selected.c === c) {
+        state.selected = null;
+        state.legalForSelected = [];
+        renderBoard();
+        return;
+      }
+      if (tryMoveTo(r, c)) return;
+    }
+
+    const piece = engine.board[r][c];
+    if (piece && piece.color === engine.turn) {
+      state.selected = { r, c };
+      state.legalForSelected = engine.getLegalMovesForSquare(r, c);
+      renderBoard();
+    } else {
+      state.selected = null;
+      state.legalForSelected = [];
+      renderBoard();
+    }
+  }
+
+  function renderBoard() {
+    boardEl.innerHTML = '';
+    const checkKing = engine.inCheck(engine.turn) ? engine.findKing(engine.turn) : null;
+    const legalTargets = new Map();
+    for (const m of state.legalForSelected) {
+      legalTargets.set(`${m.toR},${m.toC}`, m);
+    }
+
+    for (let vr = 0; vr < 8; vr++) {
+      for (let vc = 0; vc < 8; vc++) {
+        const r = state.flipped ? 7 - vr : vr;
+        const c = state.flipped ? 7 - vc : vc;
+
+        const sq = document.createElement('div');
+        const isLight = (r + c) % 2 === 0;
+        sq.className = `square ${isLight ? 'light' : 'dark'}`;
+        sq.dataset.r = r;
+        sq.dataset.c = c;
+        sq.setAttribute('role', 'gridcell');
+
+        if (state.lastMove) {
+          if (state.lastMove.fromR === r && state.lastMove.fromC === c) sq.classList.add('last-from');
+          if (state.lastMove.toR === r && state.lastMove.toC === c) sq.classList.add('last-to');
+        }
+
+        if (state.selected && state.selected.r === r && state.selected.c === c) {
+          sq.classList.add('selected');
+        }
+
+        if (checkKing && checkKing.r === r && checkKing.c === c) {
+          sq.classList.add('in-check');
+        }
+
+        // Coordinates on outer edges
+        if (vc === 0) {
+          const rankEl = document.createElement('span');
+          rankEl.className = 'coord-rank';
+          rankEl.textContent = RANKS[r];
+          sq.appendChild(rankEl);
+        }
+        if (vr === 7) {
+          const fileEl = document.createElement('span');
+          fileEl.className = 'coord-file';
+          fileEl.textContent = FILES[c];
+          sq.appendChild(fileEl);
+        }
+
+        // Legal move hint
+        const legalMove = legalTargets.get(`${r},${c}`);
+        const piece = engine.board[r][c];
+        if (legalMove) {
+          const indicator = document.createElement('span');
+          indicator.className = piece || legalMove.isEnPassant ? 'capture-ring' : 'move-dot';
+          sq.appendChild(indicator);
+        }
+
+        // Piece
+        if (piece) {
+          const pieceEl = document.createElement('div');
+          pieceEl.className = 'piece';
+          pieceEl.innerHTML = window.ChessPieces.getPieceSvg(piece.color, piece.type);
+          const canDrag = isHumanTurn() && piece.color === engine.turn;
+          pieceEl.draggable = canDrag;
+
+          if (canDrag) {
+            pieceEl.addEventListener('dragstart', (e) => {
+              state.selected = { r, c };
+              state.legalForSelected = engine.getLegalMovesForSquare(r, c);
+              e.dataTransfer.effectAllowed = 'move';
+              e.dataTransfer.setData('text/plain', `${r},${c}`);
+              setTimeout(() => renderBoard(), 0);
+            });
+          }
+          sq.appendChild(pieceEl);
+        }
+
+        sq.addEventListener('click', () => handleSquareClick(r, c));
+        sq.addEventListener('dragover', (e) => {
+          if (legalTargets.has(`${r},${c}`)) {
+            e.preventDefault();
+            sq.classList.add('drag-over');
+          }
+        });
+        sq.addEventListener('dragleave', () => sq.classList.remove('drag-over'));
+        sq.addEventListener('drop', (e) => {
+          e.preventDefault();
+          sq.classList.remove('drag-over');
+          if (!isHumanTurn()) return;
+          tryMoveTo(r, c);
+        });
+
+        boardEl.appendChild(sq);
+      }
+    }
+  }
+
+  function renderCapturedStrip(container, capturedPieces, advantage) {
+    container.innerHTML = '';
+    const sorted = [...capturedPieces].sort(
+      (a, b) => PIECE_MAT_VAL[b.type] - PIECE_MAT_VAL[a.type]
+    );
+    for (const p of sorted) {
+      const span = document.createElement('span');
+      span.className = 'captured-piece-svg';
+      span.innerHTML = window.ChessPieces.getPieceSvg(p.color, p.type);
+      container.appendChild(span);
+    }
+    if (advantage > 0) {
+      const adv = document.createElement('span');
+      adv.className = 'material-adv';
+      adv.textContent = `+${advantage}`;
+      container.appendChild(adv);
+    }
+  }
+
+  function updatePlayerBars() {
+    const topColor = state.flipped ? 'w' : 'b';
+    const bottomColor = state.flipped ? 'b' : 'w';
+
+    const labelFor = (color) => {
+      if (state.mode === 'pvp') {
+        if (state.pvpType === 'online') {
+          if (!state.onlineConnected) return color === 'w' ? 'White' : 'Black';
+          return color === state.onlineColor ? 'You (Online)' : 'Opponent (Online)';
+        }
+        return color === 'w' ? 'Player 1' : 'Player 2';
+      }
+      if (color === state.humanColor) return 'You';
+      const cap = state.difficulty.charAt(0).toUpperCase() + state.difficulty.slice(1);
+      return `Computer (${cap})`;
+    };
+
+    topNameEl.textContent = labelFor(topColor);
+    topMetaEl.textContent = topColor === 'w' ? 'White' : 'Black';
+    topAvatarEl.textContent = topColor === 'w' ? '♔' : '♚';
+    topAvatarEl.className = `player-avatar ${topColor === 'w' ? 'white-avatar' : 'black-avatar'}`;
+
+    bottomNameEl.textContent = labelFor(bottomColor);
+    bottomMetaEl.textContent = bottomColor === 'w' ? 'White' : 'Black';
+    bottomAvatarEl.textContent = bottomColor === 'w' ? '♔' : '♚';
+    bottomAvatarEl.className = `player-avatar ${bottomColor === 'w' ? 'white-avatar' : 'black-avatar'}`;
+
+    const matW = engine.captured.w.reduce((s, p) => s + PIECE_MAT_VAL[p.type], 0);
+    const matB = engine.captured.b.reduce((s, p) => s + PIECE_MAT_VAL[p.type], 0);
+
+    const topAdv = topColor === 'w' ? matW - matB : matB - matW;
+    const bottomAdv = bottomColor === 'w' ? matW - matB : matB - matW;
+
+    renderCapturedStrip(topCapturedEl, engine.captured[topColor], topAdv);
+    renderCapturedStrip(bottomCapturedEl, engine.captured[bottomColor], bottomAdv);
+
+    const topActive = !state.gameOver && engine.turn === topColor;
+    const bottomActive = !state.gameOver && engine.turn === bottomColor;
+
+    topTurnPill.classList.toggle('active', topActive);
+    bottomTurnPill.classList.toggle('active', bottomActive);
+
+    topTurnPill.textContent =
+      topActive && state.mode === 'ai' && topColor !== state.humanColor && state.aiThinking
+        ? 'Thinking...'
+        : topActive
+        ? 'Active Turn'
+        : 'Waiting';
+
+    bottomTurnPill.textContent =
+      bottomActive && state.mode === 'ai' && bottomColor !== state.humanColor && state.aiThinking
+        ? 'Thinking...'
+        : bottomActive
+        ? state.mode === 'ai'
+          ? 'Your Turn'
+          : 'Active Turn'
+        : 'Waiting';
+  }
+
+  function updateStatusPanel() {
+    const status = engine.getGameStatus();
+    const turnName = engine.turn === 'w' ? 'White' : 'Black';
+
+    statusDot.classList.remove('check', 'over');
+
+    if (status.state === 'checkmate') {
+      statusDot.classList.add('over');
+      statusTitle.textContent = 'Checkmate!';
+      statusDetail.textContent = `${status.winner === 'w' ? 'White' : 'Black'} wins the match.`;
+    } else if (status.state !== 'playing') {
+      statusDot.classList.add('over');
+      statusTitle.textContent = status.reason;
+      statusDetail.textContent = 'Game drawn. Start a new game anytime!';
+    } else if (state.aiThinking) {
+      statusTitle.textContent = `Computer (${state.difficulty}) Thinking...`;
+      statusDetail.textContent = `${turnName} is calculating the next move.`;
+    } else if (status.inCheck) {
+      statusDot.classList.add('check');
+      statusTitle.textContent = `${turnName} is in Check!`;
+      statusDetail.textContent = 'Protect your king — only check-escaping moves are highlighted.';
+    } else {
+      statusTitle.textContent = `${turnName} to Move`;
+      statusDetail.textContent =
+        engine.moveList.length === 0
+          ? 'Click or drag any piece to begin.'
+          : `Last move: ${engine.moveList[engine.moveList.length - 1].san}`;
+    }
+
+    btnUndo.disabled =
+      engine.moveList.length === 0 ||
+      state.aiThinking ||
+      (state.mode === 'pvp' && state.pvpType === 'online');
+
+    const diffLocked = state.mode === 'ai' && (engine.moveList.length > 0 || state.aiThinking);
+    document.querySelectorAll('[data-diff]').forEach((btn) => {
+      btn.disabled = diffLocked;
+      btn.title = diffLocked
+        ? 'Difficulty is locked once the game starts. Click New Game to change.'
+        : '';
+    });
+  }
+
+  function renderMoveHistory() {
+    const moves = engine.moveList;
+    moveCountEl.textContent = `${moves.length} ${moves.length === 1 ? 'move' : 'moves'}`;
+
+    if (moves.length === 0) {
+      moveListEl.innerHTML = '<div class="empty-history">No moves yet. Let’s play!</div>';
+      return;
+    }
+
+    moveListEl.innerHTML = '';
+    for (let i = 0; i < moves.length; i += 2) {
+      const row = document.createElement('div');
+      row.className = 'move-row';
+
+      const num = document.createElement('span');
+      num.className = 'move-num';
+      num.textContent = `${Math.floor(i / 2) + 1}.`;
+
+      const wSan = document.createElement('span');
+      wSan.className = `move-san ${i === moves.length - 1 ? 'latest' : ''}`;
+      wSan.textContent = moves[i].san;
+
+      const bSan = document.createElement('span');
+      bSan.className = `move-san ${i + 1 === moves.length - 1 ? 'latest' : ''}`;
+      bSan.textContent = moves[i + 1] ? moves[i + 1].san : '';
+
+      row.appendChild(num);
+      row.appendChild(wSan);
+      row.appendChild(bSan);
+      moveListEl.appendChild(row);
+    }
+    moveListEl.scrollTop = moveListEl.scrollHeight;
+  }
+
+  function renderAll() {
+    renderBoard();
+    updatePlayerBars();
+    updateStatusPanel();
+    renderMoveHistory();
+  }
+
+  function setOnlineUI(statusType, message, gameId) {
+    connBadge.className = 'conn-badge';
+    if (statusType === 'waiting') {
+      connBadge.classList.add('waiting');
+      connBadge.textContent = 'Waiting';
+    } else if (statusType === 'connected') {
+      connBadge.classList.add('connected');
+      connBadge.textContent = 'Live';
+    } else if (statusType === 'error') {
+      connBadge.classList.add('error');
+      connBadge.textContent = 'Error';
+    } else {
+      connBadge.textContent = 'Offline';
+    }
+
+    if (gameId) {
+      displayGameId.textContent = gameId;
+      onlineSetupView.classList.add('hidden');
+      onlineActiveView.classList.remove('hidden');
+    } else if (statusType === 'offline' || statusType === 'error') {
+      onlineSetupView.classList.remove('hidden');
+      onlineActiveView.classList.add('hidden');
+    }
+    if (message) onlineHint.textContent = message;
+  }
+
+  const online = new window.ChessOnline({
+    onStatus(statusType, message, gameId) {
+      setOnlineUI(statusType, message, gameId);
+    },
+    onConnected(role, gameId) {
+      state.onlineConnected = true;
+      state.onlineColor = role === 'host' ? 'w' : 'b';
+      setOnlineUI('connected', `Connected! You play as ${state.onlineColor === 'w' ? 'White' : 'Black'}.`, gameId);
+      startNewGame(true);
+    },
+    onDisconnected() {
+      state.onlineConnected = false;
+      setOnlineUI('error', 'Opponent disconnected from the room.');
+      updatePlayerBars();
+      updateStatusPanel();
+    },
+    onError(msg) {
+      state.onlineConnected = false;
+      setOnlineUI('error', msg);
+      alert(msg);
+    },
+    onMessage(payload) {
+      if (!payload || !payload.type) return;
+      if (payload.type === 'move' && payload.move) {
+        executeMove(payload.move, true);
+      } else if (payload.type === 'new_game') {
+        startNewGame(true);
+      }
+    }
+  });
+
+  function updateVisibility() {
+    const isAI = state.mode === 'ai';
+    const isPvpOnline = state.mode === 'pvp' && state.pvpType === 'online';
+    difficultyGroup.classList.toggle('hidden', !isAI);
+    sideChoiceCard.classList.toggle('hidden', !isAI);
+    pvpTypeGroup.classList.toggle('hidden', isAI);
+    onlineCard.classList.toggle('hidden', !isPvpOnline);
+  }
+
+  // Event Bindings
+  document.querySelectorAll('[data-mode]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const mode = btn.dataset.mode;
+      if (state.mode === mode) return;
+      state.mode = mode;
+      document.querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('active', b === btn));
+      if (mode === 'ai' && state.onlineConnected) {
+        online.leave();
+        state.onlineConnected = false;
+      }
+      updateVisibility();
+      startNewGame();
+    });
+  });
+
+  document.querySelectorAll('[data-pvp-type]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const pvpType = btn.dataset.pvpType;
+      if (state.pvpType === pvpType) return;
+      state.pvpType = pvpType;
+      document.querySelectorAll('[data-pvp-type]').forEach((b) => b.classList.toggle('active', b === btn));
+      if (pvpType === 'offline') {
+        online.leave();
+        state.onlineConnected = false;
+        setOnlineUI('offline', 'Share this Game ID with your friend.');
+      }
+      updateVisibility();
+      startNewGame();
+    });
+  });
+
+  document.getElementById('btn-host-game').addEventListener('click', () => {
+    online.hostGame();
+  });
+
+  document.getElementById('btn-join-game').addEventListener('click', () => {
+    online.joinGame(inputGameId.value);
+  });
+
+  inputGameId.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') online.joinGame(inputGameId.value);
+  });
+
+  document.getElementById('btn-leave-room').addEventListener('click', () => {
+    online.leave();
+    state.onlineConnected = false;
+    setOnlineUI('offline', 'Left the room.');
+    startNewGame(true);
+  });
+
+  document.getElementById('btn-copy-id').addEventListener('click', () => {
+    if (!online.gameId) return;
+    navigator.clipboard?.writeText(online.gameId);
+    onlineHint.textContent = `Copied Game ID: ${online.gameId}`;
+  });
+
+  document.querySelectorAll('[data-diff]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (engine.moveList.length > 0 || state.aiThinking) return;
+      state.difficulty = btn.dataset.diff;
+      document.querySelectorAll('[data-diff]').forEach((b) => b.classList.toggle('active', b === btn));
+      updatePlayerBars();
+    });
+  });
+
+  document.querySelectorAll('[data-side]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const side = btn.dataset.side;
+      if (state.humanColor === side) return;
+      state.humanColor = side;
+      document.querySelectorAll('[data-side]').forEach((b) => b.classList.toggle('active', b === btn));
+      startNewGame();
+    });
+  });
+
+  document.querySelectorAll('.swatch[data-theme]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.body.dataset.theme = btn.dataset.theme;
+      document.querySelectorAll('.swatch[data-theme]').forEach((b) => b.classList.toggle('active', b === btn));
+    });
+  });
+
+  document.getElementById('btn-new-game').addEventListener('click', () => startNewGame(false));
+  document.getElementById('btn-play-again').addEventListener('click', () => startNewGame(false));
+  document.getElementById('btn-review-board').addEventListener('click', () => {
+    gameoverModal.classList.add('hidden');
+  });
+
+  document.getElementById('btn-flip').addEventListener('click', () => {
+    state.flipped = !state.flipped;
+    renderBoard();
+    updatePlayerBars();
+  });
+
+  btnUndo.addEventListener('click', () => {
+    if (state.aiThinking || engine.moveList.length === 0) return;
+    if (state.mode === 'pvp' && state.pvpType === 'online') return;
+    if (state.mode === 'ai') {
+      // Undo both AI response and player move when possible
+      if (engine.turn === state.humanColor && engine.moveList.length >= 2) {
+        engine.undoMove();
+        engine.undoMove();
+      } else {
+        engine.undoMove();
+      }
+    } else {
+      engine.undoMove();
+    }
+    state.gameOver = false;
+    state.selected = null;
+    state.legalForSelected = [];
+    const last = engine.moveList[engine.moveList.length - 1];
+    state.lastMove = last
+      ? { fromR: last.move.fromR, fromC: last.move.fromC, toR: last.move.toR, toC: last.move.toC }
+      : null;
+    gameoverModal.classList.add('hidden');
+    renderAll();
+  });
+
+  btnSound.addEventListener('click', () => {
+    const next = !window.ChessSound.isEnabled();
+    window.ChessSound.setEnabled(next);
+    btnSound.setAttribute('aria-pressed', String(next));
+    soundIcon.innerHTML = next ? ICON_SOUND_ON : ICON_SOUND_OFF;
+    soundLabel.textContent = next ? 'Sound On' : 'Muted';
+  });
+
+  // Check URL ?game=ID for direct invite links
+  const urlParams = new URLSearchParams(window.location.search);
+  const invitedGameId = urlParams.get('game');
+  if (invitedGameId) {
+    state.mode = 'pvp';
+    state.pvpType = 'online';
+    document.getElementById('btn-mode-ai').classList.remove('active');
+    document.getElementById('btn-mode-pvp').classList.add('active');
+    document.getElementById('btn-pvp-offline').classList.remove('active');
+    document.getElementById('btn-pvp-online').classList.add('active');
+    inputGameId.value = invitedGameId.toUpperCase();
+  }
+
+  updateVisibility();
+  // Initialize
+  startNewGame();
+})();
