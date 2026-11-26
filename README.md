@@ -38,4 +38,3 @@ chess/
     ├── sound.js      # Piece-specific Web Audio API sound effects
     └── app.js        # UI controller
 ```
-

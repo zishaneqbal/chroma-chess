@@ -464,6 +464,10 @@ input {
   animation: checkPulse 1s ease-in-out infinite;
 }
 
+.player-clock.hidden {
+  display: none;
+}
+
 /* Board Frame & Grid */
 .board-frame {
   position: relative;

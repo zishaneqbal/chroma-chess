@@ -117,6 +117,10 @@
     const running = !state.gameOver && engine.moveList.length > 0;
 
     const applyClock = (el, color) => {
+      const isComputer = state.mode === 'ai' && color !== state.humanColor;
+      el.classList.toggle('hidden', isComputer);
+      if (isComputer) return;
+
       const secs = state.clocks[color];
       el.textContent = formatClock(secs);
       el.classList.remove('active', 'low', 'critical');
@@ -137,6 +141,7 @@
         return;
       }
       const turn = engine.turn;
+      if (state.mode === 'ai' && turn !== state.humanColor) return;
       state.clocks[turn] = Math.max(0, state.clocks[turn] - 1);
       updateClockUI();
 
