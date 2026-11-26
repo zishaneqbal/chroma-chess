@@ -7,6 +7,7 @@
   const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
   const RANKS = ['8', '7', '6', '5', '4', '3', '2', '1'];
   const PIECE_MAT_VAL = { P: 1, N: 3, B: 3, R: 5, Q: 9, K: 0 };
+  const INITIAL_CLOCK_SECONDS = 600; // 10 minutes per player
 
   const engine = new window.ChessEngine();
 
@@ -18,6 +19,9 @@
     onlineColor: 'w',     // 'w' | 'b' (used in 2P online mode)
     onlineConnected: false,
     opponentName: 'Opponent',
+    speakerEnabled: true,
+    clocks: { w: INITIAL_CLOCK_SECONDS, b: INITIAL_CLOCK_SECONDS },
+    clockInterval: null,
     flipped: false,
     selected: null,       // { r, c }
     legalForSelected: [],
@@ -52,13 +56,24 @@
   const topMetaEl = document.getElementById('top-player-meta');
   const topAvatarEl = document.getElementById('top-avatar');
   const topCapturedEl = document.getElementById('top-captured');
+  const topClockEl = document.getElementById('top-clock');
   const topTurnPill = document.getElementById('top-turn-pill');
 
   const bottomNameEl = document.getElementById('bottom-player-name');
   const bottomMetaEl = document.getElementById('bottom-player-meta');
   const bottomAvatarEl = document.getElementById('bottom-avatar');
   const bottomCapturedEl = document.getElementById('bottom-captured');
+  const bottomClockEl = document.getElementById('bottom-clock');
   const bottomTurnPill = document.getElementById('bottom-turn-pill');
+
+  const voiceControlsEl = document.getElementById('voice-controls');
+  const btnVoiceMic = document.getElementById('btn-voice-mic');
+  const voiceMicIcon = document.getElementById('voice-mic-icon');
+  const voiceMicLabel = document.getElementById('voice-mic-label');
+  const btnVoiceSpeaker = document.getElementById('btn-voice-speaker');
+  const voiceSpeakerIcon = document.getElementById('voice-speaker-icon');
+  const voiceSpeakerLabel = document.getElementById('voice-speaker-label');
+  const remoteVoiceAudio = document.getElementById('remote-voice-audio');
 
   const statusDot = document.getElementById('status-dot');
   const statusTitle = document.getElementById('status-title');
@@ -82,12 +97,108 @@
     return engine.turn === state.humanColor;
   }
 
+  function stopClock() {
+    if (state.clockInterval) {
+      clearInterval(state.clockInterval);
+      state.clockInterval = null;
+    }
+  }
+
+  function formatClock(totalSeconds) {
+    const s = Math.max(0, Math.floor(totalSeconds));
+    const mins = Math.floor(s / 60);
+    const secs = s % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+
+  function updateClockUI() {
+    const topColor = state.flipped ? 'w' : 'b';
+    const bottomColor = state.flipped ? 'b' : 'w';
+    const running = !state.gameOver && engine.moveList.length > 0;
+
+    const applyClock = (el, color) => {
+      const secs = state.clocks[color];
+      el.textContent = formatClock(secs);
+      el.classList.remove('active', 'low', 'critical');
+      if (running && engine.turn === color) el.classList.add('active');
+      if (secs <= 20) el.classList.add('critical');
+      else if (secs <= 60) el.classList.add('low');
+    };
+
+    applyClock(topClockEl, topColor);
+    applyClock(bottomClockEl, bottomColor);
+  }
+
+  function ensureClockRunning() {
+    if (state.clockInterval || state.gameOver || engine.moveList.length === 0) return;
+    state.clockInterval = setInterval(() => {
+      if (state.gameOver) {
+        stopClock();
+        return;
+      }
+      const turn = engine.turn;
+      state.clocks[turn] = Math.max(0, state.clocks[turn] - 1);
+      updateClockUI();
+
+      if (state.clocks[turn] === 0) {
+        stopClock();
+        if (state.mode === 'pvp' && state.pvpType === 'online' && state.onlineConnected) {
+          online.send({ type: 'timeout', clocks: { ...state.clocks } });
+        }
+        handleTimeExpired();
+      }
+    }, 1000);
+  }
+
+  function handleTimeExpired() {
+    state.gameOver = true;
+    stopClock();
+    window.ChessSound.playGameOver();
+
+    // Pieces lost ("cut"): Black captured White pieces = engine.captured.b.length, and vice versa
+    const whiteCut = engine.captured.b.length;
+    const blackCut = engine.captured.w.length;
+
+    const whiteLabel =
+      state.mode === 'pvp' && state.pvpType === 'online'
+        ? state.onlineColor === 'w'
+          ? getLocalPlayerName()
+          : state.opponentName
+        : 'White';
+    const blackLabel =
+      state.mode === 'pvp' && state.pvpType === 'online'
+        ? state.onlineColor === 'b'
+          ? getLocalPlayerName()
+          : state.opponentName
+        : 'Black';
+
+    if (whiteCut < blackCut) {
+      gameoverBadge.innerHTML = ICON_TROPHY;
+      gameoverTitle.textContent = "Time's Up!";
+      gameoverSubtitle.textContent = `${whiteLabel} wins! Lost fewer pieces (${whiteCut} vs ${blackCut}).`;
+    } else if (blackCut < whiteCut) {
+      gameoverBadge.innerHTML = ICON_TROPHY;
+      gameoverTitle.textContent = "Time's Up!";
+      gameoverSubtitle.textContent = `${blackLabel} wins! Lost fewer pieces (${blackCut} vs ${whiteCut}).`;
+    } else {
+      gameoverBadge.innerHTML = ICON_DRAW;
+      gameoverTitle.textContent = "Time's Up — Draw!";
+      gameoverSubtitle.textContent = `Both players lost ${whiteCut} ${whiteCut === 1 ? 'piece' : 'pieces'}.`;
+    }
+
+    gameoverModal.classList.remove('hidden');
+    updatePlayerBars();
+    updateStatusPanel();
+  }
+
   function startNewGame(fromRemote = false) {
     if (state.aiTimer) {
       clearTimeout(state.aiTimer);
       state.aiTimer = null;
     }
+    stopClock();
     engine.reset();
+    state.clocks = { w: INITIAL_CLOCK_SECONDS, b: INITIAL_CLOCK_SECONDS };
     state.selected = null;
     state.legalForSelected = [];
     state.lastMove = null;
@@ -136,7 +247,7 @@
     if (!entry) return;
 
     if (!fromRemote && state.mode === 'pvp' && state.pvpType === 'online' && state.onlineConnected) {
-      online.send({ type: 'move', move });
+      online.send({ type: 'move', move, clocks: { ...state.clocks } });
     }
 
     state.selected = null;
@@ -167,8 +278,10 @@
     renderAll();
 
     if (status.state !== 'playing') {
+      stopClock();
       handleGameOver(status);
     } else {
+      ensureClockRunning();
       maybeTriggerAI();
     }
   }
@@ -178,6 +291,8 @@
   const ICON_DRAW = `<svg class="ui-icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>`;
   const ICON_SOUND_ON = `<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>`;
   const ICON_SOUND_OFF = `<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`;
+  const ICON_MIC_ON = `<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`;
+  const ICON_MIC_OFF = `<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`;
 
   function getLocalPlayerName() {
     const raw = inputPlayerName ? inputPlayerName.value.trim() : '';
@@ -542,8 +657,21 @@
   function renderAll() {
     renderBoard();
     updatePlayerBars();
+    updateClockUI();
     updateStatusPanel();
     renderMoveHistory();
+  }
+
+  function updateVoiceUI(micOn) {
+    btnVoiceMic.classList.toggle('active', Boolean(micOn));
+    btnVoiceMic.setAttribute('aria-pressed', String(Boolean(micOn)));
+    voiceMicIcon.innerHTML = micOn ? ICON_MIC_ON : ICON_MIC_OFF;
+    voiceMicLabel.textContent = micOn ? 'Mic On' : 'Mic Off';
+
+    btnVoiceSpeaker.classList.toggle('active', state.speakerEnabled);
+    btnVoiceSpeaker.setAttribute('aria-pressed', String(state.speakerEnabled));
+    voiceSpeakerIcon.innerHTML = state.speakerEnabled ? ICON_SOUND_ON : ICON_SOUND_OFF;
+    voiceSpeakerLabel.textContent = state.speakerEnabled ? 'Speaker On' : 'Muted';
   }
 
   function setOnlineUI(statusType, message, gameId) {
@@ -560,6 +688,8 @@
     } else {
       connBadge.textContent = 'Offline';
     }
+
+    voiceControlsEl.classList.toggle('hidden', statusType !== 'connected');
 
     if (gameId) {
       displayGameId.textContent = gameId;
@@ -580,6 +710,7 @@
       state.onlineConnected = true;
       state.onlineColor = role === 'host' ? 'w' : 'b';
       state.opponentName = 'Opponent';
+      updateVoiceUI(false);
       online.send({ type: 'hello', name: getLocalPlayerName() });
       setOnlineUI('connected', `Connected! You play as ${state.onlineColor === 'w' ? 'White' : 'Black'}.`, gameId);
       startNewGame(true);
@@ -587,14 +718,26 @@
     onDisconnected() {
       state.onlineConnected = false;
       state.opponentName = 'Opponent';
+      updateVoiceUI(false);
       setOnlineUI('error', 'Opponent disconnected from the room.');
       updatePlayerBars();
       updateStatusPanel();
     },
     onError(msg) {
       state.onlineConnected = false;
+      updateVoiceUI(false);
       setOnlineUI('error', msg);
       alert(msg);
+    },
+    onRemoteStream(stream) {
+      if (remoteVoiceAudio) {
+        remoteVoiceAudio.srcObject = stream || null;
+        remoteVoiceAudio.muted = !state.speakerEnabled;
+      }
+    },
+    onVoiceError(msg) {
+      onlineHint.textContent = msg;
+      updateVoiceUI(false);
     },
     onMessage(payload) {
       if (!payload || !payload.type) return;
@@ -603,7 +746,22 @@
         state.opponentName = cleanName || 'Opponent';
         updatePlayerBars();
       } else if (payload.type === 'move' && payload.move) {
+        if (payload.clocks) {
+          state.clocks = {
+            w: Number(payload.clocks.w) || 0,
+            b: Number(payload.clocks.b) || 0
+          };
+        }
         executeMove(payload.move, true);
+      } else if (payload.type === 'timeout') {
+        if (payload.clocks) {
+          state.clocks = {
+            w: Number(payload.clocks.w) || 0,
+            b: Number(payload.clocks.b) || 0
+          };
+        }
+        updateClockUI();
+        if (!state.gameOver) handleTimeExpired();
       } else if (payload.type === 'new_game') {
         startNewGame(true);
       }
@@ -676,6 +834,19 @@
     onlineHint.textContent = `Copied Game ID: ${online.gameId}`;
   });
 
+  btnVoiceMic.addEventListener('click', async () => {
+    const micOn = await online.toggleMic();
+    updateVoiceUI(micOn);
+  });
+
+  btnVoiceSpeaker.addEventListener('click', () => {
+    state.speakerEnabled = !state.speakerEnabled;
+    if (remoteVoiceAudio) {
+      remoteVoiceAudio.muted = !state.speakerEnabled;
+    }
+    updateVoiceUI(online.micEnabled);
+  });
+
   document.querySelectorAll('[data-diff]').forEach((btn) => {
     btn.addEventListener('click', () => {
       if (engine.moveList.length > 0 || state.aiThinking) return;
@@ -712,6 +883,7 @@
     state.flipped = !state.flipped;
     renderBoard();
     updatePlayerBars();
+    updateClockUI();
   });
 
   btnUndo.addEventListener('click', () => {
