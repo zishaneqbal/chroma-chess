@@ -17,6 +17,7 @@
     humanColor: 'w',      // 'w' | 'b' (used in AI mode)
     onlineColor: 'w',     // 'w' | 'b' (used in 2P online mode)
     onlineConnected: false,
+    opponentName: 'Opponent',
     flipped: false,
     selected: null,       // { r, c }
     legalForSelected: [],
@@ -39,6 +40,7 @@
   const displayGameId = document.getElementById('display-game-id');
   const onlineHint = document.getElementById('online-hint');
   const inputGameId = document.getElementById('input-game-id');
+  const inputPlayerName = document.getElementById('input-player-name');
   const promoModal = document.getElementById('promotion-modal');
   const promoOptions = document.getElementById('promo-options');
   const gameoverModal = document.getElementById('gameover-modal');
@@ -146,6 +148,9 @@
       toC: move.toC
     };
 
+    const movedPiece = engine.board[move.toR][move.toC];
+    const pieceType = movedPiece ? movedPiece.type : 'P';
+
     const status = engine.getGameStatus();
     if (status.state !== 'playing') {
       window.ChessSound.playGameOver();
@@ -154,9 +159,9 @@
     } else if (move.castle) {
       window.ChessSound.playCastle();
     } else if (entry.captured) {
-      window.ChessSound.playCapture();
+      window.ChessSound.playCapture(pieceType);
     } else {
-      window.ChessSound.playMove();
+      window.ChessSound.playMove(pieceType);
     }
 
     renderAll();
@@ -174,17 +179,25 @@
   const ICON_SOUND_ON = `<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>`;
   const ICON_SOUND_OFF = `<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`;
 
+  function getLocalPlayerName() {
+    const raw = inputPlayerName ? inputPlayerName.value.trim() : '';
+    return raw || 'Player';
+  }
+
   function handleGameOver(status) {
     state.gameOver = true;
     if (status.state === 'checkmate') {
-      const winnerName =
-        state.mode === 'ai'
-          ? status.winner === state.humanColor
-            ? 'You Win!'
-            : 'Computer Wins!'
-          : status.winner === 'w'
-          ? 'White Wins!'
-          : 'Black Wins!';
+      let winnerName;
+      if (state.mode === 'ai') {
+        winnerName = status.winner === state.humanColor ? 'You Win!' : 'Computer Wins!';
+      } else if (state.mode === 'pvp' && state.pvpType === 'online') {
+        winnerName =
+          status.winner === state.onlineColor
+            ? `${getLocalPlayerName()} Wins!`
+            : `${state.opponentName} Wins!`;
+      } else {
+        winnerName = status.winner === 'w' ? 'White Wins!' : 'Black Wins!';
+      }
       gameoverBadge.innerHTML = status.winner === state.humanColor || state.mode === 'pvp' ? ICON_TROPHY : ICON_BOT;
       gameoverTitle.textContent = 'Checkmate!';
       gameoverSubtitle.textContent = `${winnerName} (${status.winner === 'w' ? 'White' : 'Black'} delivered mate)`;
@@ -393,8 +406,12 @@
     const labelFor = (color) => {
       if (state.mode === 'pvp') {
         if (state.pvpType === 'online') {
-          if (!state.onlineConnected) return color === 'w' ? 'White' : 'Black';
-          return color === state.onlineColor ? 'You (Online)' : 'Opponent (Online)';
+          if (!state.onlineConnected) {
+            return color === 'w' ? `${getLocalPlayerName()} (Host)` : 'Waiting for opponent...';
+          }
+          return color === state.onlineColor
+            ? `${getLocalPlayerName()} (You)`
+            : state.opponentName;
         }
         return color === 'w' ? 'Player 1' : 'Player 2';
       }
@@ -562,11 +579,14 @@
     onConnected(role, gameId) {
       state.onlineConnected = true;
       state.onlineColor = role === 'host' ? 'w' : 'b';
+      state.opponentName = 'Opponent';
+      online.send({ type: 'hello', name: getLocalPlayerName() });
       setOnlineUI('connected', `Connected! You play as ${state.onlineColor === 'w' ? 'White' : 'Black'}.`, gameId);
       startNewGame(true);
     },
     onDisconnected() {
       state.onlineConnected = false;
+      state.opponentName = 'Opponent';
       setOnlineUI('error', 'Opponent disconnected from the room.');
       updatePlayerBars();
       updateStatusPanel();
@@ -578,7 +598,11 @@
     },
     onMessage(payload) {
       if (!payload || !payload.type) return;
-      if (payload.type === 'move' && payload.move) {
+      if (payload.type === 'hello') {
+        const cleanName = String(payload.name || '').trim().slice(0, 20);
+        state.opponentName = cleanName || 'Opponent';
+        updatePlayerBars();
+      } else if (payload.type === 'move' && payload.move) {
         executeMove(payload.move, true);
       } else if (payload.type === 'new_game') {
         startNewGame(true);
@@ -722,6 +746,21 @@
     soundIcon.innerHTML = next ? ICON_SOUND_ON : ICON_SOUND_OFF;
     soundLabel.textContent = next ? 'Sound On' : 'Muted';
   });
+
+  // Persist player name in localStorage
+  try {
+    const savedName = localStorage.getItem('chromachess_name');
+    if (savedName && inputPlayerName) inputPlayerName.value = savedName;
+  } catch (_) {}
+
+  if (inputPlayerName) {
+    inputPlayerName.addEventListener('input', () => {
+      try {
+        localStorage.setItem('chromachess_name', inputPlayerName.value);
+      } catch (_) {}
+      updatePlayerBars();
+    });
+  }
 
   // Check URL ?game=ID for direct invite links
   const urlParams = new URLSearchParams(window.location.search);

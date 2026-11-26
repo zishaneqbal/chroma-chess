@@ -563,21 +563,27 @@ input {
   pointer-events: none;
 }
 
-/* Piece Wrapper */
+/* Piece Wrapper (3D depth & lift) */
 .piece {
-  width: 84%;
-  height: 84%;
+  width: 86%;
+  height: 86%;
   z-index: 4;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: grab;
-  transition: transform 0.14s ease;
-  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.35));
+  transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1), filter 0.16s ease;
+  filter: drop-shadow(0 5px 4px rgba(0, 0, 0, 0.42)) drop-shadow(0 2px 1px rgba(0, 0, 0, 0.5));
 }
 
 .piece:hover {
-  transform: translateY(-2px) scale(1.04);
+  transform: translateY(-4px) scale(1.06);
+  filter: drop-shadow(0 10px 8px rgba(0, 0, 0, 0.5)) drop-shadow(0 3px 2px rgba(0, 0, 0, 0.45));
+}
+
+.square.selected .piece {
+  transform: translateY(-6px) scale(1.09);
+  filter: drop-shadow(0 12px 10px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 8px rgba(255, 255, 255, 0.35));
 }
 
 .piece:active {
@@ -786,6 +792,33 @@ input {
   transition: border-color 0.2s ease;
 }
 
+.name-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.field-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.player-name-input {
+  width: 100%;
+  background: rgba(8, 12, 26, 0.75);
+  border: 1px solid var(--border-glass);
+  border-radius: 10px;
+  padding: 9px 12px;
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.player-name-input:focus,
 .game-id-input:focus {
   border-color: var(--accent-primary);
 }

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>ChromaChess — Modern Colorful Chess</title>
+  <title>ChromaChess: Modern Colorful Chess</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
@@ -21,7 +21,7 @@
         <div class="brand-logo" aria-hidden="true">♛</div>
         <div>
           <h1>ChromaChess</h1>
-          <p class="brand-sub">Modern Strategy &bull; Play Solo or Local 2P</p>
+          <p class="brand-sub">Modern Strategy &bull; Play Solo or Local/Online 2P</p>
         </div>
       </div>
 
@@ -184,6 +184,17 @@
           </div>
 
           <div class="online-host-box" id="online-setup-view">
+            <div class="name-field">
+              <label for="input-player-name" class="field-label">Your Name</label>
+              <input
+                type="text"
+                id="input-player-name"
+                class="player-name-input"
+                placeholder="Enter your name"
+                maxlength="20"
+                autocomplete="name"
+              />
+            </div>
             <button type="button" class="action-btn primary full-btn" id="btn-host-game">
               <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/><line x1="15" y1="13" x2="15.01" y2="13"/><line x1="18" y1="11" x2="18.01" y2="11"/><rect x="2" y="6" width="20" height="12" rx="2"/></svg>
               Create Game ID
