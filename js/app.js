@@ -319,7 +319,13 @@
     } else {
       gameoverBadge.innerHTML = ICON_DRAW;
       gameoverTitle.textContent = status.reason;
-      gameoverSubtitle.textContent = 'The game ended in a draw.';
+      const drawDetails = {
+        Stalemate: `${engine.turn === 'w' ? 'White' : 'Black'} has no legal moves and is not in check.`,
+        'Threefold repetition': 'The exact same position occurred three times.',
+        'Insufficient material': 'Neither side has enough pieces to force checkmate.',
+        '50-move rule': '50 moves played without a pawn move or capture.'
+      };
+      gameoverSubtitle.textContent = drawDetails[status.reason] || 'The game ended in a draw.';
     }
     gameoverModal.classList.remove('hidden');
     updateStatusPanel();

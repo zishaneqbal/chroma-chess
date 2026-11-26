@@ -10,7 +10,11 @@ A Chess web application built with **HTML, CSS, and JavaScript** featuring Singl
   - Choose to play as **White** or **Black**.
 - **2-Player Multiplayer**:
   - **Offline (Same Device)**: Pass-and-play on one screen.
-  - **Online (Different Devices)**: Enter your **player name**, create a **Game ID** (with one-click copy), and share it with a friend to connect and sync moves, names, and rematches in real time via WebRTC (`PeerJS`) — no backend server required.
+  - **Online (Different Devices)**: Enter your **player name**, create a **Game ID** (with one-click copy), and share it with a friend to connect and sync moves, names, clocks, and rematches in real time via WebRTC (`PeerJS`) — no backend server required.
+  - **Live Voice Chat (Online Mode)**: Built-in WebRTC **Mic** and **Speaker** toggle buttons to talk with your opponent while playing (requires HTTPS or `localhost`).
+- **10-Minute Player Clocks**:
+  - Each player has a **10:00** total timer per game, synced in real time in Online mode.
+  - If a player's timer expires, the player who lost the **fewest chess pieces** wins (or **Draw** if both lost the same number).
 - **Complete Chess Rules**:
   - Castling (kingside & queenside), En Passant, Pawn Promotion (Queen, Rook, Bishop, Knight), Check, Checkmate, Stalemate, 50-move rule, Insufficient Material, and Threefold Repetition.
 - **Modern Colorful UI & Cross-Device Support**:
