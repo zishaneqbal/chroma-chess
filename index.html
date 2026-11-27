@@ -107,18 +107,20 @@
         <!-- Mobile Slot: Quick Reaction Pills at top of board when connected -->
         <div class="mobile-slot hidden" id="mobile-reaction-top-slot"></div>
 
-        <!-- Top Player Bar -->
-        <div class="player-bar" id="top-player-bar">
-          <div class="player-identity">
-            <span class="player-avatar black-avatar" id="top-avatar">♚</span>
-            <div>
-              <div class="player-name" id="top-player-name">Computer (Medium)</div>
-              <div class="player-meta" id="top-player-meta">Black</div>
+        <!-- Top Player Bar Row -->
+        <div class="top-player-row" id="top-player-row">
+          <div class="player-bar" id="top-player-bar">
+            <div class="player-identity">
+              <span class="player-avatar black-avatar" id="top-avatar">♚</span>
+              <div>
+                <div class="player-name" id="top-player-name">Computer (Medium)</div>
+                <div class="player-meta" id="top-player-meta">Black</div>
+              </div>
             </div>
+            <div class="captured-strip" id="top-captured" aria-label="Captured pieces"></div>
+            <div class="player-clock" id="top-clock" aria-label="Top player timer">10:00</div>
+            <div class="turn-pill" id="top-turn-pill">Thinking...</div>
           </div>
-          <div class="captured-strip" id="top-captured" aria-label="Captured pieces"></div>
-          <div class="player-clock" id="top-clock" aria-label="Top player timer">10:00</div>
-          <div class="turn-pill" id="top-turn-pill">Thinking...</div>
         </div>
 
         <!-- Board Frame -->

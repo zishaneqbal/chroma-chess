@@ -1373,6 +1373,19 @@ input {
   transform: translateY(-1px);
 }
 
+.top-player-row {
+  width: 100%;
+  max-width: var(--board-size);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.top-player-row .player-bar {
+  flex: 1;
+  min-width: 0;
+}
+
 .top-bar-head {
   display: flex;
   align-items: center;
@@ -1588,6 +1601,10 @@ input {
     padding: 2px 0;
   }
 
+  .top-bar.mobile-started.ai-mode {
+    display: none;
+  }
+
   .top-bar.mobile-started .brand {
     display: none;
   }
@@ -1600,6 +1617,12 @@ input {
   .top-bar.mobile-started .reaction-bar {
     flex: 1;
     min-width: 0;
+  }
+
+  .top-player-row .mobile-menu-btn {
+    padding: 8px 9px;
+    border-radius: 12px;
+    align-self: stretch;
   }
 
   .brand {

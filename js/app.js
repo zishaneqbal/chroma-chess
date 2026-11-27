@@ -106,6 +106,7 @@
   const actionsCard = document.querySelector('.actions-card');
   const sidePanel = document.querySelector('.side-panel');
   const historyCard = document.querySelector('.history-card');
+  const topPlayerRow = document.getElementById('top-player-row');
   const bottomPlayerBar = document.getElementById('bottom-player-bar');
   const onlineActiveViewEl = document.getElementById('online-active-view');
   const roomStatusDot = document.getElementById('room-status-dot');
@@ -1051,6 +1052,15 @@
 
     if (topBarEl) {
       topBarEl.classList.toggle('mobile-started', hideHeaderOnPhone);
+      topBarEl.classList.toggle('ai-mode', hideHeaderOnPhone && state.mode === 'ai');
+    }
+
+    if (hideHeaderOnPhone && state.mode === 'ai') {
+      if (topPlayerRow && btnMobileMenu && btnMobileMenu.parentElement !== topPlayerRow) {
+        topPlayerRow.appendChild(btnMobileMenu);
+      }
+    } else if (topBarActionsEl && btnMobileMenu && btnMobileMenu.parentElement !== topBarActionsEl) {
+      topBarActionsEl.appendChild(btnMobileMenu);
     }
 
     if (isMobile) {
