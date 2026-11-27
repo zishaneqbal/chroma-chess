@@ -1579,6 +1579,29 @@ input {
     border-radius: 13px;
   }
 
+  .top-bar.mobile-started {
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border: none;
+    box-shadow: none;
+    padding: 2px 0;
+  }
+
+  .top-bar.mobile-started .brand {
+    display: none;
+  }
+
+  .top-bar.mobile-started .top-bar-head {
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .top-bar.mobile-started .reaction-bar {
+    flex: 1;
+    min-width: 0;
+  }
+
   .brand {
     gap: 8px;
     min-width: 0;

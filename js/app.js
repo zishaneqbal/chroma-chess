@@ -98,6 +98,10 @@
 
   // Mobile & Tablet Drawer & Slots (<= 960px)
   const mobileQuery = window.matchMedia('(max-width: 960px)');
+  const phoneQuery = window.matchMedia('(max-width: 640px)');
+  const topBarEl = document.querySelector('.top-bar');
+  const topBarHeadEl = document.querySelector('.top-bar-head');
+  const topBarActionsEl = document.querySelector('.top-bar-actions');
   const controlsBar = document.getElementById('controls-bar');
   const actionsCard = document.querySelector('.actions-card');
   const sidePanel = document.querySelector('.side-panel');
@@ -774,6 +778,7 @@
       const showSideTop = state.mode === 'ai' && !aiSettingsLocked;
       mobileOnlineTopSlot.classList.toggle('hidden', !showOnlineTop && !showSideTop);
     }
+    syncMobileLayout();
     document.querySelectorAll('[data-diff]').forEach((btn) => {
       btn.disabled = aiSettingsLocked;
       btn.title = aiSettingsLocked
@@ -1041,6 +1046,12 @@
     if (!mobileDrawerBody || !controlsBar || !actionsCard || !sidePanel) return;
     const isMobile = mobileQuery.matches;
     const isPvpOnline = state.mode === 'pvp' && state.pvpType === 'online';
+    const gameStarted = engine.moveList.length > 0 || state.aiThinking;
+    const hideHeaderOnPhone = phoneQuery.matches && gameStarted;
+
+    if (topBarEl) {
+      topBarEl.classList.toggle('mobile-started', hideHeaderOnPhone);
+    }
 
     if (isMobile) {
       // Move items 1-7 into the right sidebar drawer
@@ -1101,12 +1112,20 @@
         roomStatusDot.classList.toggle('hidden', !isPvpOnline);
       }
 
-      // Quick Reaction Pills -> top of board when connected in online mode
+      // Quick Reaction Pills -> top row next to menu button on phone once game starts,
+      // or top of board before game starts / on tablet
       if (isPvpOnline && state.onlineConnected) {
-        if (mobileReactionTopSlot && reactionBar && reactionBar.parentElement !== mobileReactionTopSlot) {
-          mobileReactionTopSlot.appendChild(reactionBar);
+        if (hideHeaderOnPhone && topBarHeadEl && reactionBar) {
+          if (reactionBar.parentElement !== topBarHeadEl) {
+            topBarHeadEl.insertBefore(reactionBar, topBarActionsEl || null);
+          }
+          mobileReactionTopSlot?.classList.add('hidden');
+        } else {
+          if (mobileReactionTopSlot && reactionBar && reactionBar.parentElement !== mobileReactionTopSlot) {
+            mobileReactionTopSlot.appendChild(reactionBar);
+          }
+          mobileReactionTopSlot?.classList.remove('hidden');
         }
-        mobileReactionTopSlot?.classList.remove('hidden');
       } else {
         mobileReactionTopSlot?.classList.add('hidden');
         if (onlineActiveViewEl && reactionBar && reactionBar.parentElement !== onlineActiveViewEl) {
@@ -1288,6 +1307,7 @@
   btnMobileClose?.addEventListener('click', () => setMobileDrawerOpen(false));
   mobileDrawerBackdrop?.addEventListener('click', () => setMobileDrawerOpen(false));
   mobileQuery.addEventListener?.('change', syncMobileLayout);
+  phoneQuery.addEventListener?.('change', syncMobileLayout);
 
   document.getElementById('btn-new-game').addEventListener('click', handleNewGameClick);
   document.getElementById('btn-play-again').addEventListener('click', handleNewGameClick);
