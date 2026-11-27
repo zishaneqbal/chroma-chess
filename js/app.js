@@ -737,16 +737,23 @@
           : `Last move: ${engine.moveList[engine.moveList.length - 1].san}`;
     }
 
+    const minMovesForUndo = state.mode === 'ai' && state.humanColor === 'b' ? 1 : 0;
     btnUndo.disabled =
-      engine.moveList.length === 0 ||
+      engine.moveList.length <= minMovesForUndo ||
       state.aiThinking ||
       state.mode === 'pvp';
 
-    const diffLocked = state.mode === 'ai' && (engine.moveList.length > 0 || state.aiThinking);
+    const aiSettingsLocked = state.mode === 'ai' && (engine.moveList.length > 0 || state.aiThinking);
     document.querySelectorAll('[data-diff]').forEach((btn) => {
-      btn.disabled = diffLocked;
-      btn.title = diffLocked
+      btn.disabled = aiSettingsLocked;
+      btn.title = aiSettingsLocked
         ? 'Difficulty is locked once the game starts. Click New Game to change.'
+        : '';
+    });
+    document.querySelectorAll('[data-side]').forEach((btn) => {
+      btn.disabled = aiSettingsLocked;
+      btn.title = aiSettingsLocked
+        ? 'Side is locked once the game starts. Click New Game to change.'
         : '';
     });
 
@@ -1084,6 +1091,7 @@
 
   document.querySelectorAll('[data-side]').forEach((btn) => {
     btn.addEventListener('click', () => {
+      if (engine.moveList.length > 0 || state.aiThinking) return;
       const side = btn.dataset.side;
       if (state.humanColor === side) return;
       state.humanColor = side;
@@ -1099,8 +1107,18 @@
     });
   });
 
-  document.getElementById('btn-new-game').addEventListener('click', () => startNewGame(false));
-  document.getElementById('btn-play-again').addEventListener('click', () => startNewGame(false));
+  function handleNewGameClick() {
+    if (state.mode === 'ai') {
+      state.humanColor = 'w';
+      document.querySelectorAll('[data-side]').forEach((b) =>
+        b.classList.toggle('active', b.dataset.side === 'w')
+      );
+    }
+    startNewGame(false);
+  }
+
+  document.getElementById('btn-new-game').addEventListener('click', handleNewGameClick);
+  document.getElementById('btn-play-again').addEventListener('click', handleNewGameClick);
   document.getElementById('btn-review-board').addEventListener('click', () => {
     gameoverModal.classList.add('hidden');
   });
@@ -1113,10 +1131,11 @@
   });
 
   btnUndo.addEventListener('click', () => {
-    if (state.aiThinking || engine.moveList.length === 0) return;
+    const minMovesForUndo = state.mode === 'ai' && state.humanColor === 'b' ? 1 : 0;
+    if (state.aiThinking || engine.moveList.length <= minMovesForUndo) return;
     if (state.mode === 'pvp') return;
     // Undo both AI response and player move when possible
-    if (engine.turn === state.humanColor && engine.moveList.length >= 2) {
+    if (engine.turn === state.humanColor && engine.moveList.length >= minMovesForUndo + 2) {
       engine.undoMove();
       engine.undoMove();
     } else {
