@@ -15,6 +15,7 @@
     mode: 'ai',          // 'ai' | 'pvp'
     pvpType: 'offline',  // 'offline' | 'online'
     difficulty: 'medium', // 'easy' | 'medium' | 'hard'
+    timeControl: INITIAL_CLOCK_SECONDS, // 180 | 300 | 600 | 0 (off)
     humanColor: 'w',      // 'w' | 'b' (used in AI mode)
     onlineColor: 'w',     // 'w' | 'b' (used in 2P online mode)
     onlineConnected: false,
@@ -26,10 +27,12 @@
     selected: null,       // { r, c }
     legalForSelected: [],
     lastMove: null,       // { fromR, fromC, toR, toC }
+    slideMove: null,      // { fromR, fromC, toR, toC }
     pendingPromotion: null, // { fromR, fromC, toR, toC }
     aiThinking: false,
     gameOver: false,
-    aiTimer: null
+    aiTimer: null,
+    reactionTimer: null
   };
 
   // DOM Elements
@@ -85,6 +88,11 @@
   const btnSound = document.getElementById('btn-sound');
   const soundIcon = document.getElementById('sound-icon');
   const soundLabel = document.getElementById('sound-label');
+  const confettiCanvas = document.getElementById('confetti-canvas');
+  const reactionToast = document.getElementById('reaction-toast');
+  const reactionBar = document.getElementById('reaction-bar');
+  const drawOfferBanner = document.getElementById('draw-offer-banner');
+  const onlineMatchActions = document.getElementById('online-match-actions');
 
   function isHumanTurn() {
     if (state.gameOver || state.aiThinking || state.pendingPromotion) return false;
@@ -118,8 +126,9 @@
 
     const applyClock = (el, color) => {
       const isComputer = state.mode === 'ai' && color !== state.humanColor;
-      el.classList.toggle('hidden', isComputer);
-      if (isComputer) return;
+      const timerOff = state.timeControl === 0;
+      el.classList.toggle('hidden', isComputer || timerOff);
+      if (isComputer || timerOff) return;
 
       const secs = state.clocks[color];
       el.textContent = formatClock(secs);
@@ -134,7 +143,7 @@
   }
 
   function ensureClockRunning() {
-    if (state.clockInterval || state.gameOver || engine.moveList.length === 0) return;
+    if (state.timeControl === 0 || state.clockInterval || state.gameOver || engine.moveList.length === 0) return;
     state.clockInterval = setInterval(() => {
       if (state.gameOver) {
         stopClock();
@@ -203,13 +212,15 @@
     }
     stopClock();
     engine.reset();
-    state.clocks = { w: INITIAL_CLOCK_SECONDS, b: INITIAL_CLOCK_SECONDS };
+    state.clocks = { w: state.timeControl, b: state.timeControl };
     state.selected = null;
     state.legalForSelected = [];
     state.lastMove = null;
+    state.slideMove = null;
     state.pendingPromotion = null;
     state.aiThinking = false;
     state.gameOver = false;
+    drawOfferBanner.classList.add('hidden');
     if (state.mode === 'ai') {
       state.flipped = state.humanColor === 'b';
     } else if (state.mode === 'pvp' && state.pvpType === 'online') {
@@ -225,6 +236,7 @@
     promoModal.classList.add('hidden');
     gameoverModal.classList.add('hidden');
     renderAll();
+    saveSession();
     maybeTriggerAI();
   }
 
@@ -257,6 +269,12 @@
 
     state.selected = null;
     state.legalForSelected = [];
+    state.slideMove = {
+      fromR: move.fromR,
+      fromC: move.fromC,
+      toR: move.toR,
+      toC: move.toC
+    };
     state.lastMove = {
       fromR: move.fromR,
       fromC: move.fromC,
@@ -281,6 +299,7 @@
     }
 
     renderAll();
+    saveSession();
 
     if (status.state !== 'playing') {
       stopClock();
@@ -304,8 +323,85 @@
     return raw || 'Player';
   }
 
+  function launchConfetti() {
+    if (!confettiCanvas) return;
+    const rect = confettiCanvas.getBoundingClientRect();
+    confettiCanvas.width = rect.width || 560;
+    confettiCanvas.height = rect.height || 560;
+    const ctx = confettiCanvas.getContext('2d');
+    if (!ctx) return;
+
+    const colors = ['#38bdf8', '#a855f7', '#fb7185', '#34d399', '#fbbf24', '#f472b6'];
+    const particles = Array.from({ length: 85 }, () => ({
+      x: confettiCanvas.width / 2 + (Math.random() - 0.5) * 120,
+      y: confettiCanvas.height * 0.35 + (Math.random() - 0.5) * 60,
+      vx: (Math.random() - 0.5) * 9,
+      vy: (Math.random() - 0.85) * 9 - 2,
+      size: 5 + Math.random() * 5,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      rot: Math.random() * Math.PI * 2,
+      vRot: (Math.random() - 0.5) * 0.25,
+      life: 1
+    }));
+
+    function frame() {
+      ctx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+      let alive = false;
+      for (const p of particles) {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.22; // gravity
+        p.rot += p.vRot;
+        p.life -= 0.014;
+        if (p.life > 0) {
+          alive = true;
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, p.life);
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rot);
+          ctx.fillStyle = p.color;
+          ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.65);
+          ctx.restore();
+        }
+      }
+      if (alive) requestAnimationFrame(frame);
+      else ctx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function showReactionToast(sender, text) {
+    if (!reactionToast) return;
+    if (state.reactionTimer) clearTimeout(state.reactionTimer);
+    reactionToast.textContent = `${sender}: ${text}`;
+    reactionToast.classList.remove('hidden');
+    state.reactionTimer = setTimeout(() => {
+      reactionToast.classList.add('hidden');
+    }, 2400);
+  }
+
+  function saveSession() {
+    try {
+      const payload = {
+        mode: state.mode,
+        pvpType: state.pvpType,
+        difficulty: state.difficulty,
+        timeControl: state.timeControl,
+        humanColor: state.humanColor,
+        clocks: state.clocks,
+        moves: engine.moveList.map((m) => m.move),
+        onlineGameId: state.mode === 'pvp' && state.pvpType === 'online' ? online.gameId : null,
+        onlineRole: state.mode === 'pvp' && state.pvpType === 'online' ? online.role : null,
+        onlineColor: state.onlineColor,
+        opponentName: state.opponentName
+      };
+      sessionStorage.setItem('chromachess_session', JSON.stringify(payload));
+    } catch (_) {}
+  }
+
   function handleGameOver(status) {
     state.gameOver = true;
+    stopClock();
     if (status.state === 'checkmate') {
       let winnerName;
       if (state.mode === 'ai') {
@@ -321,6 +417,12 @@
       gameoverBadge.innerHTML = status.winner === state.humanColor || state.mode === 'pvp' ? ICON_TROPHY : ICON_BOT;
       gameoverTitle.textContent = 'Checkmate!';
       gameoverSubtitle.textContent = `${winnerName} (${status.winner === 'w' ? 'White' : 'Black'} delivered mate)`;
+      launchConfetti();
+    } else if (status.state === 'resign') {
+      gameoverBadge.innerHTML = ICON_TROPHY;
+      gameoverTitle.textContent = 'Game Over';
+      gameoverSubtitle.textContent = status.reason;
+      launchConfetti();
     } else {
       gameoverBadge.innerHTML = ICON_DRAW;
       gameoverTitle.textContent = status.reason;
@@ -328,7 +430,8 @@
         Stalemate: `${engine.turn === 'w' ? 'White' : 'Black'} has no legal moves and is not in check.`,
         'Threefold repetition': 'The exact same position occurred three times.',
         'Insufficient material': 'Neither side has enough pieces to force checkmate.',
-        '50-move rule': '50 moves played without a pawn move or capture.'
+        '50-move rule': '50 moves played without a pawn move or capture.',
+        'Draw by agreement': 'Both players agreed to a draw.'
       };
       gameoverSubtitle.textContent = drawDetails[status.reason] || 'The game ended in a draw.';
     }
@@ -474,6 +577,22 @@
           const canDrag = isHumanTurn() && piece.color === engine.turn;
           pieceEl.draggable = canDrag;
 
+          if (state.slideMove && state.slideMove.toR === r && state.slideMove.toC === c) {
+            const fromVR = state.flipped ? 7 - state.slideMove.fromR : state.slideMove.fromR;
+            const fromVC = state.flipped ? 7 - state.slideMove.fromC : state.slideMove.fromC;
+            const dxPct = (fromVC - vc) * 116;
+            const dyPct = (fromVR - vr) * 116;
+            if (dxPct !== 0 || dyPct !== 0) {
+              pieceEl.style.transform = `translate(${dxPct}%, ${dyPct}%)`;
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                  pieceEl.classList.add('sliding');
+                  pieceEl.style.transform = '';
+                });
+              });
+            }
+          }
+
           if (canDrag) {
             pieceEl.addEventListener('dragstart', (e) => {
               state.selected = { r, c };
@@ -504,6 +623,7 @@
         boardEl.appendChild(sq);
       }
     }
+    state.slideMove = null;
   }
 
   function renderCapturedStrip(container, capturedPieces, advantage) {
@@ -620,7 +740,7 @@
     btnUndo.disabled =
       engine.moveList.length === 0 ||
       state.aiThinking ||
-      (state.mode === 'pvp' && state.pvpType === 'online');
+      state.mode === 'pvp';
 
     const diffLocked = state.mode === 'ai' && (engine.moveList.length > 0 || state.aiThinking);
     document.querySelectorAll('[data-diff]').forEach((btn) => {
@@ -628,6 +748,12 @@
       btn.title = diffLocked
         ? 'Difficulty is locked once the game starts. Click New Game to change.'
         : '';
+    });
+
+    const timeLocked = engine.moveList.length > 0 || state.aiThinking;
+    document.querySelectorAll('[data-time]').forEach((btn) => {
+      btn.disabled = timeLocked;
+      btn.title = timeLocked ? 'Timer is locked once the game starts.' : '';
     });
   }
 
@@ -701,6 +827,9 @@
     }
 
     voiceControlsEl.classList.toggle('hidden', statusType !== 'connected');
+    if (reactionBar) reactionBar.classList.toggle('hidden', statusType !== 'connected');
+    if (onlineMatchActions) onlineMatchActions.classList.toggle('hidden', statusType !== 'connected');
+    if (statusType !== 'connected' && drawOfferBanner) drawOfferBanner.classList.add('hidden');
 
     if (gameId) {
       displayGameId.textContent = gameId;
@@ -720,11 +849,27 @@
     onConnected(role, gameId) {
       state.onlineConnected = true;
       state.onlineColor = role === 'host' ? 'w' : 'b';
-      state.opponentName = 'Opponent';
       updateVoiceUI(false);
-      online.send({ type: 'hello', name: getLocalPlayerName() });
+      online.send({
+        type: 'hello',
+        name: getLocalPlayerName(),
+        timeControl: role === 'host' ? state.timeControl : undefined
+      });
       setOnlineUI('connected', `Connected! You play as ${state.onlineColor === 'w' ? 'White' : 'Black'}.`, gameId);
-      startNewGame(true);
+
+      if (engine.moveList.length > 0) {
+        online.send({
+          type: 'sync_state',
+          moves: engine.moveList.map((m) => m.move),
+          clocks: { ...state.clocks },
+          timeControl: state.timeControl
+        });
+        renderAll();
+        ensureClockRunning();
+      } else {
+        startNewGame(true);
+      }
+      saveSession();
     },
     onDisconnected() {
       state.onlineConnected = false;
@@ -755,6 +900,14 @@
       if (payload.type === 'hello') {
         const cleanName = String(payload.name || '').trim().slice(0, 20);
         state.opponentName = cleanName || 'Opponent';
+        if (typeof payload.timeControl === 'number') {
+          state.timeControl = payload.timeControl;
+          state.clocks = { w: state.timeControl, b: state.timeControl };
+          document.querySelectorAll('[data-time]').forEach((b) =>
+            b.classList.toggle('active', Number(b.dataset.time) === state.timeControl)
+          );
+          updateClockUI();
+        }
         updatePlayerBars();
       } else if (payload.type === 'move' && payload.move) {
         if (payload.clocks) {
@@ -773,8 +926,58 @@
         }
         updateClockUI();
         if (!state.gameOver) handleTimeExpired();
+      } else if (payload.type === 'reaction' && payload.text) {
+        showReactionToast(state.opponentName, String(payload.text).slice(0, 32));
+      } else if (payload.type === 'resign') {
+        if (!state.gameOver) {
+          window.ChessSound.playGameOver();
+          handleGameOver({
+            state: 'resign',
+            reason: `${state.opponentName} resigned. ${getLocalPlayerName()} wins!`
+          });
+        }
+      } else if (payload.type === 'draw_offer') {
+        if (!state.gameOver && drawOfferBanner) {
+          drawOfferBanner.classList.remove('hidden');
+        }
+      } else if (payload.type === 'draw_response') {
+        if (payload.accepted && !state.gameOver) {
+          window.ChessSound.playGameOver();
+          handleGameOver({ state: 'draw', reason: 'Draw by agreement' });
+        } else if (!payload.accepted) {
+          onlineHint.textContent = `${state.opponentName} declined the draw offer.`;
+        }
       } else if (payload.type === 'new_game') {
         startNewGame(true);
+      } else if (payload.type === 'sync_state' && Array.isArray(payload.moves)) {
+        if (payload.moves.length > engine.moveList.length) {
+          engine.reset();
+          for (const mv of payload.moves) {
+            engine.makeMove(mv);
+          }
+          if (typeof payload.timeControl === 'number') {
+            state.timeControl = payload.timeControl;
+            document.querySelectorAll('[data-time]').forEach((b) =>
+              b.classList.toggle('active', Number(b.dataset.time) === state.timeControl)
+            );
+          }
+          if (payload.clocks) {
+            state.clocks = {
+              w: Number(payload.clocks.w) || 0,
+              b: Number(payload.clocks.b) || 0
+            };
+          }
+          const last = engine.moveList[engine.moveList.length - 1];
+          state.lastMove = last
+            ? { fromR: last.move.fromR, fromC: last.move.fromC, toR: last.move.toR, toC: last.move.toC }
+            : null;
+          state.gameOver = false;
+          renderAll();
+          saveSession();
+          const st = engine.getGameStatus();
+          if (st.state !== 'playing') handleGameOver(st);
+          else ensureClockRunning();
+        }
       }
     }
   });
@@ -786,6 +989,18 @@
     sideChoiceCard.classList.toggle('hidden', !isAI);
     pvpTypeGroup.classList.toggle('hidden', isAI);
     onlineCard.classList.toggle('hidden', !isPvpOnline);
+    btnUndo.classList.toggle('hidden', !isAI);
+
+    document.querySelectorAll('[data-time-mode]').forEach((btn) => {
+      btn.classList.toggle('hidden', btn.dataset.timeMode !== state.mode);
+    });
+    if ((isAI && state.timeControl === 900) || (!isAI && state.timeControl === 180)) {
+      state.timeControl = 600;
+      state.clocks = { w: 600, b: 600 };
+      document.querySelectorAll('[data-time]').forEach((b) =>
+        b.classList.toggle('active', Number(b.dataset.time) === 600)
+      );
+    }
   }
 
   // Event Bindings
@@ -899,15 +1114,11 @@
 
   btnUndo.addEventListener('click', () => {
     if (state.aiThinking || engine.moveList.length === 0) return;
-    if (state.mode === 'pvp' && state.pvpType === 'online') return;
-    if (state.mode === 'ai') {
-      // Undo both AI response and player move when possible
-      if (engine.turn === state.humanColor && engine.moveList.length >= 2) {
-        engine.undoMove();
-        engine.undoMove();
-      } else {
-        engine.undoMove();
-      }
+    if (state.mode === 'pvp') return;
+    // Undo both AI response and player move when possible
+    if (engine.turn === state.humanColor && engine.moveList.length >= 2) {
+      engine.undoMove();
+      engine.undoMove();
     } else {
       engine.undoMove();
     }
@@ -920,6 +1131,7 @@
       : null;
     gameoverModal.classList.add('hidden');
     renderAll();
+    saveSession();
   });
 
   btnSound.addEventListener('click', () => {
@@ -930,7 +1142,56 @@
     soundLabel.textContent = next ? 'Sound On' : 'Muted';
   });
 
-  // Persist player name in localStorage
+  document.querySelectorAll('[data-time]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (engine.moveList.length > 0 || state.aiThinking) return;
+      state.timeControl = Number(btn.dataset.time);
+      state.clocks = { w: state.timeControl, b: state.timeControl };
+      document.querySelectorAll('[data-time]').forEach((b) => b.classList.toggle('active', b === btn));
+      updateClockUI();
+      saveSession();
+    });
+  });
+
+  document.querySelectorAll('.react-pill').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (!state.onlineConnected) return;
+      const text = btn.dataset.react;
+      online.send({ type: 'reaction', text });
+      showReactionToast(getLocalPlayerName(), text);
+    });
+  });
+
+  document.getElementById('btn-offer-draw')?.addEventListener('click', () => {
+    if (!state.onlineConnected || state.gameOver) return;
+    online.send({ type: 'draw_offer' });
+    onlineHint.textContent = 'Draw offer sent to opponent...';
+  });
+
+  document.getElementById('btn-resign')?.addEventListener('click', () => {
+    if (!state.onlineConnected || state.gameOver) return;
+    online.send({ type: 'resign' });
+    window.ChessSound.playGameOver();
+    handleGameOver({
+      state: 'resign',
+      reason: `${getLocalPlayerName()} resigned. ${state.opponentName} wins!`
+    });
+  });
+
+  document.getElementById('btn-accept-draw')?.addEventListener('click', () => {
+    if (drawOfferBanner) drawOfferBanner.classList.add('hidden');
+    if (!state.onlineConnected || state.gameOver) return;
+    online.send({ type: 'draw_response', accepted: true });
+    window.ChessSound.playGameOver();
+    handleGameOver({ state: 'draw', reason: 'Draw by agreement' });
+  });
+
+  document.getElementById('btn-decline-draw')?.addEventListener('click', () => {
+    if (drawOfferBanner) drawOfferBanner.classList.add('hidden');
+    if (state.onlineConnected) online.send({ type: 'draw_response', accepted: false });
+  });
+
+  // Restore saved player name
   try {
     const savedName = localStorage.getItem('chromachess_name');
     if (savedName && inputPlayerName) inputPlayerName.value = savedName;
@@ -948,6 +1209,8 @@
   // Check URL ?game=ID for direct invite links
   const urlParams = new URLSearchParams(window.location.search);
   const invitedGameId = urlParams.get('game');
+  let restored = false;
+
   if (invitedGameId) {
     state.mode = 'pvp';
     state.pvpType = 'online';
@@ -958,7 +1221,90 @@
     inputGameId.value = invitedGameId.toUpperCase();
   }
 
+  // Attempt session state recovery for AI, Offline, and Online games
+  let pendingOnlineReconnect = null;
+  if (!invitedGameId) {
+    try {
+      const raw = sessionStorage.getItem('chromachess_session');
+      if (raw) {
+        const saved = JSON.parse(raw);
+        const hasMoves = saved && Array.isArray(saved.moves) && saved.moves.length > 0;
+        const hasOnlineRoom = saved && saved.pvpType === 'online' && saved.onlineGameId && saved.onlineRole;
+        if (hasMoves || hasOnlineRoom) {
+          state.mode = saved.mode || 'ai';
+          state.pvpType = saved.pvpType || 'offline';
+          state.difficulty = saved.difficulty || 'medium';
+          state.timeControl = typeof saved.timeControl === 'number' ? saved.timeControl : INITIAL_CLOCK_SECONDS;
+          state.humanColor = saved.humanColor || 'w';
+          state.onlineColor = saved.onlineColor || (saved.onlineRole === 'guest' ? 'b' : 'w');
+          state.opponentName = saved.opponentName || 'Opponent';
+          state.flipped =
+            state.mode === 'ai'
+              ? state.humanColor === 'b'
+              : state.pvpType === 'online'
+              ? state.onlineColor === 'b'
+              : false;
+
+          document.querySelectorAll('[data-mode]').forEach((b) =>
+            b.classList.toggle('active', b.dataset.mode === state.mode)
+          );
+          document.querySelectorAll('[data-pvp-type]').forEach((b) =>
+            b.classList.toggle('active', b.dataset.pvpType === state.pvpType)
+          );
+          document.querySelectorAll('[data-diff]').forEach((b) =>
+            b.classList.toggle('active', b.dataset.diff === state.difficulty)
+          );
+          document.querySelectorAll('[data-time]').forEach((b) =>
+            b.classList.toggle('active', Number(b.dataset.time) === state.timeControl)
+          );
+          document.querySelectorAll('[data-side]').forEach((b) =>
+            b.classList.toggle('active', b.dataset.side === state.humanColor)
+          );
+
+          engine.reset();
+          if (hasMoves) {
+            for (const mv of saved.moves) {
+              engine.makeMove(mv);
+            }
+          }
+          if (saved.clocks) {
+            state.clocks = {
+              w: Number(saved.clocks.w) || 0,
+              b: Number(saved.clocks.b) || 0
+            };
+          } else {
+            state.clocks = { w: state.timeControl, b: state.timeControl };
+          }
+          const last = engine.moveList[engine.moveList.length - 1];
+          state.lastMove = last
+            ? { fromR: last.move.fromR, fromC: last.move.fromC, toR: last.move.toR, toC: last.move.toC }
+            : null;
+          if (hasOnlineRoom) {
+            pendingOnlineReconnect = { id: saved.onlineGameId, role: saved.onlineRole };
+          }
+          restored = true;
+        }
+      }
+    } catch (_) {}
+  }
+
   updateVisibility();
-  // Initialize
-  startNewGame();
+  if (restored) {
+    renderAll();
+    const st = engine.getGameStatus();
+    if (st.state !== 'playing') {
+      handleGameOver(st);
+    } else if (pendingOnlineReconnect) {
+      if (pendingOnlineReconnect.role === 'host') {
+        online.hostGame(pendingOnlineReconnect.id);
+      } else {
+        online.joinGame(pendingOnlineReconnect.id);
+      }
+    } else {
+      ensureClockRunning();
+      maybeTriggerAI();
+    }
+  } else {
+    startNewGame();
+  }
 })();

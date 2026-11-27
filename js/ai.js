@@ -1,8 +1,8 @@
 /**
- * Chess Computer AI with 3 difficulty levels:
+ * Chess Computer AI with 3 difficulty levels, Opening Book, and Quiescence Search:
  * - easy:   Casual beginner (mostly random with light preference for captures/checks)
- * - medium: Depth 2 Alpha-Beta search with material + Piece-Square Tables
- * - hard:   Depth 3 Alpha-Beta search with MVV-LVA move ordering & full PST
+ * - medium: Opening book + Depth 2 Alpha-Beta search with material & Piece-Square Tables
+ * - hard:   Opening book + Depth 3 Alpha-Beta search + Quiescence Search on captures
  */
 (function (global) {
   const PIECE_VALUES = {
@@ -12,6 +12,29 @@
     R: 500,
     Q: 900,
     K: 20000
+  };
+
+  // Curated Opening Book keyed by SAN move sequence (e.g. "e4 e5")
+  // Each entry lists candidate SAN responses for variety.
+  const OPENING_BOOK = {
+    '': ['e4', 'd4', 'c4', 'Nf3'],
+    'e4': ['e5', 'c5', 'e6', 'c6'],
+    'd4': ['d5', 'Nf6', 'e6'],
+    'c4': ['e5', 'Nf6', 'c5'],
+    'Nf3': ['d5', 'Nf6', 'c5'],
+    'e4 e5': ['Nf3', 'Bc4', 'Nc3'],
+    'e4 e5 Nf3': ['Nc6', 'Nf6'],
+    'e4 e5 Nf3 Nc6': ['Bb5', 'Bc4', 'd4'],
+    'e4 c5': ['Nf3', 'Nc3', 'c3'],
+    'e4 c5 Nf3': ['d6', 'Nc6', 'e6'],
+    'e4 e6': ['d4'],
+    'e4 e6 d4': ['d5'],
+    'e4 c6': ['d4'],
+    'e4 c6 d4': ['d5'],
+    'd4 d5': ['c4', 'Nf3'],
+    'd4 d5 c4': ['e6', 'c6', 'dxc4'],
+    'd4 Nf6': ['c4', 'Nf3'],
+    'd4 Nf6 c4': ['g6', 'e6', 'c5']
   };
 
   // Piece-Square Tables from White's perspective (row 0 = rank 8, row 7 = rank 1)
@@ -112,20 +135,60 @@
     });
   }
 
-  function alphaBeta(engine, depth, alpha, beta, maximizing, aiColor) {
+  function quiescence(engine, alpha, beta, maximizing, aiColor, qDepth = 3) {
+    const standPat = evaluateBoard(engine, aiColor);
+    if (qDepth <= 0) return standPat;
+
+    if (maximizing) {
+      if (standPat >= beta) return beta;
+      if (standPat > alpha) alpha = standPat;
+
+      const captures = orderMoves(
+        engine,
+        engine.getLegalMoves(engine.turn).filter((m) => m.isCapture || m.promotion)
+      );
+      for (const m of captures) {
+        engine._applyRawMove(m);
+        const score = quiescence(engine, alpha, beta, false, aiColor, qDepth - 1);
+        engine._unapplyRawMove();
+        if (score >= beta) return beta;
+        if (score > alpha) alpha = score;
+      }
+      return alpha;
+    } else {
+      if (standPat <= alpha) return alpha;
+      if (standPat < beta) beta = standPat;
+
+      const captures = orderMoves(
+        engine,
+        engine.getLegalMoves(engine.turn).filter((m) => m.isCapture || m.promotion)
+      );
+      for (const m of captures) {
+        engine._applyRawMove(m);
+        const score = quiescence(engine, alpha, beta, true, aiColor, qDepth - 1);
+        engine._unapplyRawMove();
+        if (score <= alpha) return alpha;
+        if (score < beta) beta = score;
+      }
+      return beta;
+    }
+  }
+
+  function alphaBeta(engine, depth, alpha, beta, maximizing, aiColor, useQuiescence) {
     const turnColor = engine.turn;
     const moves = engine.getLegalMoves(turnColor);
 
     if (moves.length === 0) {
       if (engine.inCheck(turnColor)) {
-        // Prefer faster checkmate
         return maximizing ? -100000 - depth : 100000 + depth;
       }
-      return 0; // Stalemate
+      return 0;
     }
 
     if (depth === 0) {
-      return evaluateBoard(engine, aiColor);
+      return useQuiescence
+        ? quiescence(engine, alpha, beta, maximizing, aiColor, 3)
+        : evaluateBoard(engine, aiColor);
     }
 
     orderMoves(engine, moves);
@@ -134,7 +197,7 @@
       let best = -Infinity;
       for (const m of moves) {
         engine._applyRawMove(m);
-        const val = alphaBeta(engine, depth - 1, alpha, beta, false, aiColor);
+        const val = alphaBeta(engine, depth - 1, alpha, beta, false, aiColor, useQuiescence);
         engine._unapplyRawMove();
         if (val > best) best = val;
         if (best > alpha) alpha = best;
@@ -145,7 +208,7 @@
       let best = Infinity;
       for (const m of moves) {
         engine._applyRawMove(m);
-        const val = alphaBeta(engine, depth - 1, alpha, beta, true, aiColor);
+        const val = alphaBeta(engine, depth - 1, alpha, beta, true, aiColor, useQuiescence);
         engine._unapplyRawMove();
         if (val < best) best = val;
         if (best < beta) beta = best;
@@ -155,11 +218,26 @@
     }
   }
 
+  function pickOpeningBookMove(engine, legalMoves) {
+    if (!engine.moveList || engine.moveList.length > 6) return null;
+    const key = engine.moveList.map((m) => m.san.replace(/[+#]/g, '')).join(' ');
+    const candidates = OPENING_BOOK[key];
+    if (!candidates || candidates.length === 0) return null;
+
+    // Match candidate SANs against actual legal moves
+    const matched = [];
+    for (const m of legalMoves) {
+      const san = engine._computeSAN(m, legalMoves);
+      if (candidates.includes(san)) matched.push(m);
+    }
+    if (matched.length === 0) return null;
+    return matched[Math.floor(Math.random() * matched.length)];
+  }
+
   function chooseEasyMove(engine) {
     const moves = engine.getLegalMoves(engine.turn);
     if (moves.length === 0) return null;
 
-    // 45% chance to prefer a capture or promotion if available, otherwise random
     const tactical = moves.filter((m) => m.isCapture || m.promotion);
     if (tactical.length > 0 && Math.random() < 0.45) {
       return tactical[Math.floor(Math.random() * tactical.length)];
@@ -176,7 +254,11 @@
       return chooseEasyMove(engine);
     }
 
-    const depth = difficulty === 'hard' ? 3 : 2;
+    const bookMove = pickOpeningBookMove(engine, moves);
+    if (bookMove) return bookMove;
+
+    const isHard = difficulty === 'hard';
+    const depth = isHard ? 3 : 2;
     orderMoves(engine, moves);
 
     let bestScore = -Infinity;
@@ -184,7 +266,7 @@
 
     for (const m of moves) {
       engine._applyRawMove(m);
-      const score = alphaBeta(engine, depth - 1, -Infinity, Infinity, false, aiColor);
+      const score = alphaBeta(engine, depth - 1, -Infinity, Infinity, false, aiColor, isHard);
       engine._unapplyRawMove();
 
       if (score > bestScore) {
@@ -195,7 +277,6 @@
       }
     }
 
-    // Slight tie-breaker randomness among equally-scored best moves
     return bestMoves[Math.floor(Math.random() * bestMoves.length)];
   }
 

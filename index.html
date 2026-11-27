@@ -63,6 +63,18 @@
           </div>
         </div>
 
+        <!-- Time Control Selector -->
+        <div class="time-group" id="time-group" role="group" aria-label="Time Control">
+          <span class="control-label">Timer</span>
+          <div class="segmented-control compact">
+            <button type="button" class="seg-btn" data-time="180" data-time-mode="ai">3m</button>
+            <button type="button" class="seg-btn" data-time="300">5m</button>
+            <button type="button" class="seg-btn active" data-time="600">10m</button>
+            <button type="button" class="seg-btn hidden" data-time="900" data-time-mode="pvp">15m</button>
+            <button type="button" class="seg-btn" data-time="0">Off</button>
+          </div>
+        </div>
+
         <!-- Theme Swatches -->
         <div class="theme-group" role="group" aria-label="Board Theme">
           <span class="control-label">Theme</span>
@@ -97,6 +109,8 @@
         <!-- Board Frame -->
         <div class="board-frame">
           <div class="chessboard" id="chessboard" role="grid" aria-label="8 by 8 chessboard"></div>
+          <canvas class="confetti-canvas" id="confetti-canvas" aria-hidden="true"></canvas>
+          <div class="reaction-toast hidden" id="reaction-toast" role="status" aria-live="polite"></div>
 
           <!-- Pawn Promotion Modal -->
           <div class="modal-overlay hidden" id="promotion-modal" role="dialog" aria-modal="true" aria-label="Choose promotion piece">
@@ -244,6 +258,30 @@
               </button>
             </div>
             <audio id="remote-voice-audio" autoplay playsinline></audio>
+
+            <!-- Quick Reactions (visible when connected) -->
+            <div class="reaction-bar hidden" id="reaction-bar" role="group" aria-label="Quick Reactions">
+              <button type="button" class="react-pill" data-react="Good move! 👏🏻">Good move! 👏🏻</button>
+              <button type="button" class="react-pill" data-react="Nice! 👍">Nice! 👍</button>
+              <button type="button" class="react-pill" data-react="Okay, Wait a sec 😤">Okay, Wait a sec 😤</button>
+              <button type="button" class="react-pill" data-react="Hahahah 🤣">Hahahah 🤣</button>
+            </div>
+
+            <!-- Incoming Draw Offer Banner -->
+            <div class="draw-offer-banner hidden" id="draw-offer-banner">
+              <span>Opponent offered a draw</span>
+              <div class="draw-offer-actions">
+                <button type="button" class="mini-pill accept" id="btn-accept-draw">Accept</button>
+                <button type="button" class="mini-pill decline" id="btn-decline-draw">Decline</button>
+              </div>
+            </div>
+
+            <!-- Online Match Controls (Resign / Offer Draw) -->
+            <div class="online-match-actions hidden" id="online-match-actions">
+              <button type="button" class="action-btn" id="btn-offer-draw">Offer Draw</button>
+              <button type="button" class="action-btn leave-btn" id="btn-resign">Resign</button>
+            </div>
+
             <button type="button" class="action-btn leave-btn" id="btn-leave-room">Leave Room</button>
           </div>
         </div>

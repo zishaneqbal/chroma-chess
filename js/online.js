@@ -133,14 +133,14 @@
       return true;
     }
 
-    hostGame() {
+    hostGame(customId = null, retryCount = 0) {
       if (!this.isSupported()) {
         if (this.cb.onError) this.cb.onError('Online multiplayer library failed to load.');
         return;
       }
       this._cleanup();
       this.role = 'host';
-      this.gameId = generateGameId();
+      this.gameId = customId ? String(customId).trim().toUpperCase() : generateGameId();
       if (this.cb.onStatus) this.cb.onStatus('waiting', 'Creating room...', this.gameId);
 
       const peer = new global.Peer(PEER_PREFIX + this.gameId, {
@@ -170,7 +170,11 @@
 
       peer.on('error', (err) => {
         if (err && err.type === 'unavailable-id') {
-          this.hostGame();
+          if (customId && retryCount < 3) {
+            setTimeout(() => this.hostGame(customId, retryCount + 1), 1200);
+          } else {
+            this.hostGame(null, 0);
+          }
           return;
         }
         if (this.cb.onError) this.cb.onError(err.message || 'Connection error');
