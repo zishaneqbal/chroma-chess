@@ -94,6 +94,28 @@
   const drawOfferBanner = document.getElementById('draw-offer-banner');
   const onlineMatchActions = document.getElementById('online-match-actions');
 
+  // Mobile & Tablet Drawer & Slots (<= 960px)
+  const mobileQuery = window.matchMedia('(max-width: 960px)');
+  const controlsBar = document.getElementById('controls-bar');
+  const actionsCard = document.querySelector('.actions-card');
+  const sidePanel = document.querySelector('.side-panel');
+  const historyCard = document.querySelector('.history-card');
+  const bottomPlayerBar = document.getElementById('bottom-player-bar');
+  const onlineActiveViewEl = document.getElementById('online-active-view');
+  const roomStatusDot = document.getElementById('room-status-dot');
+  const modeGroupEl = document.getElementById('mode-group');
+  const themeGroupEl = document.getElementById('theme-group');
+  const timeGroupEl = document.getElementById('time-group');
+  const btnNewGameEl = document.getElementById('btn-new-game');
+  const btnFlipEl = document.getElementById('btn-flip');
+  const mobileDrawer = document.getElementById('mobile-drawer');
+  const mobileDrawerBody = document.getElementById('mobile-drawer-body');
+  const mobileDrawerBackdrop = document.getElementById('mobile-drawer-backdrop');
+  const btnMobileMenu = document.getElementById('btn-mobile-menu');
+  const btnMobileClose = document.getElementById('btn-mobile-close');
+  const mobileOnlineTopSlot = document.getElementById('mobile-online-top-slot');
+  const mobileReactionTopSlot = document.getElementById('mobile-reaction-top-slot');
+
   function isHumanTurn() {
     if (state.gameOver || state.aiThinking || state.pendingPromotion) return false;
     if (state.mode === 'pvp') {
@@ -744,6 +766,12 @@
       state.mode === 'pvp';
 
     const aiSettingsLocked = state.mode === 'ai' && (engine.moveList.length > 0 || state.aiThinking);
+    sideChoiceCard.classList.toggle('hidden', state.mode !== 'ai' || aiSettingsLocked);
+    if (mobileQuery.matches && mobileOnlineTopSlot) {
+      const showOnlineTop = state.mode === 'pvp' && state.pvpType === 'online' && !state.onlineConnected;
+      const showSideTop = state.mode === 'ai' && !aiSettingsLocked;
+      mobileOnlineTopSlot.classList.toggle('hidden', !showOnlineTop && !showSideTop);
+    }
     document.querySelectorAll('[data-diff]').forEach((btn) => {
       btn.disabled = aiSettingsLocked;
       btn.title = aiSettingsLocked
@@ -833,10 +861,21 @@
       connBadge.textContent = 'Offline';
     }
 
+    if (roomStatusDot) {
+      roomStatusDot.className = 'room-status-dot';
+      const isPvpOnline = state.mode === 'pvp' && state.pvpType === 'online';
+      roomStatusDot.classList.toggle('hidden', !isPvpOnline);
+      if (statusType === 'waiting') roomStatusDot.classList.add('waiting');
+      else if (statusType === 'connected') roomStatusDot.classList.add('connected');
+      else if (statusType === 'error') roomStatusDot.classList.add('error');
+      else roomStatusDot.classList.add('offline');
+    }
+
     voiceControlsEl.classList.toggle('hidden', statusType !== 'connected');
     if (reactionBar) reactionBar.classList.toggle('hidden', statusType !== 'connected');
     if (onlineMatchActions) onlineMatchActions.classList.toggle('hidden', statusType !== 'connected');
     if (statusType !== 'connected' && drawOfferBanner) drawOfferBanner.classList.add('hidden');
+    syncMobileLayout();
 
     if (gameId) {
       displayGameId.textContent = gameId;
@@ -989,6 +1028,127 @@
     }
   });
 
+  function setMobileDrawerOpen(open) {
+    if (!mobileDrawer || !mobileDrawerBackdrop || !btnMobileMenu) return;
+    mobileDrawer.classList.toggle('open', open);
+    mobileDrawerBackdrop.classList.toggle('hidden', !open);
+    btnMobileMenu.setAttribute('aria-expanded', String(open));
+  }
+
+  function syncMobileLayout() {
+    if (!mobileDrawerBody || !controlsBar || !actionsCard || !sidePanel) return;
+    const isMobile = mobileQuery.matches;
+    const isPvpOnline = state.mode === 'pvp' && state.pvpType === 'online';
+
+    if (isMobile) {
+      // Move items 1-7 into the right sidebar drawer
+      [
+        modeGroupEl,
+        pvpTypeGroup,
+        difficultyGroup,
+        timeGroupEl,
+        themeGroupEl,
+        btnNewGameEl,
+        btnFlipEl,
+        btnSound
+      ].forEach((el) => {
+        if (el && el.parentElement !== mobileDrawerBody) {
+          mobileDrawerBody.appendChild(el);
+        }
+      });
+
+      // Undo button -> inside bottom player bar near timer (only for AI mode)
+      if (state.mode === 'ai') {
+        if (bottomPlayerBar && btnUndo && btnUndo.parentElement !== bottomPlayerBar) {
+          bottomPlayerBar.insertBefore(btnUndo, bottomClockEl || null);
+        }
+      } else if (btnUndo && btnUndo.parentElement !== actionsCard) {
+        actionsCard.appendChild(btnUndo);
+      }
+      actionsCard.classList.add('hidden');
+
+      // Top of page slot: Online Room (before joining) OR Play As White/Black (in AI mode before game starts)
+      if (isPvpOnline && !state.onlineConnected) {
+        if (mobileOnlineTopSlot && onlineCard.parentElement !== mobileOnlineTopSlot) {
+          mobileOnlineTopSlot.appendChild(onlineCard);
+        }
+        if (sideChoiceCard.parentElement !== sidePanel) {
+          sidePanel.insertBefore(sideChoiceCard, historyCard || null);
+        }
+        mobileOnlineTopSlot?.classList.remove('hidden');
+      } else if (state.mode === 'ai' && !sideChoiceCard.classList.contains('hidden')) {
+        if (mobileOnlineTopSlot && sideChoiceCard.parentElement !== mobileOnlineTopSlot) {
+          mobileOnlineTopSlot.appendChild(sideChoiceCard);
+        }
+        if (onlineCard.parentElement !== mobileDrawerBody) {
+          mobileDrawerBody.appendChild(onlineCard);
+        }
+        mobileOnlineTopSlot?.classList.remove('hidden');
+      } else {
+        mobileOnlineTopSlot?.classList.add('hidden');
+        if (onlineCard.parentElement !== mobileDrawerBody) {
+          mobileDrawerBody.appendChild(onlineCard);
+        }
+        if (sideChoiceCard.parentElement !== sidePanel) {
+          sidePanel.insertBefore(sideChoiceCard, historyCard || null);
+        }
+      }
+
+      // Room status dot in top bar (only in 2P online mode)
+      if (roomStatusDot) {
+        roomStatusDot.classList.toggle('hidden', !isPvpOnline);
+      }
+
+      // Quick Reaction Pills -> top of board when connected in online mode
+      if (isPvpOnline && state.onlineConnected) {
+        if (mobileReactionTopSlot && reactionBar && reactionBar.parentElement !== mobileReactionTopSlot) {
+          mobileReactionTopSlot.appendChild(reactionBar);
+        }
+        mobileReactionTopSlot?.classList.remove('hidden');
+      } else {
+        mobileReactionTopSlot?.classList.add('hidden');
+        if (onlineActiveViewEl && reactionBar && reactionBar.parentElement !== onlineActiveViewEl) {
+          onlineActiveViewEl.insertBefore(reactionBar, drawOfferBanner || null);
+        }
+      }
+    } else {
+      setMobileDrawerOpen(false);
+      mobileOnlineTopSlot?.classList.add('hidden');
+      mobileReactionTopSlot?.classList.add('hidden');
+      roomStatusDot?.classList.add('hidden');
+
+      [modeGroupEl, pvpTypeGroup, difficultyGroup, timeGroupEl, themeGroupEl].forEach((el) => {
+        if (el && el.parentElement !== controlsBar) {
+          controlsBar.appendChild(el);
+        }
+      });
+
+      if (btnNewGameEl && btnNewGameEl.parentElement !== actionsCard) {
+        actionsCard.insertBefore(btnNewGameEl, null);
+      }
+      if (btnUndo && btnUndo.parentElement !== actionsCard) {
+        actionsCard.insertBefore(btnUndo, null);
+      }
+      if (btnFlipEl && btnFlipEl.parentElement !== actionsCard) {
+        actionsCard.insertBefore(btnFlipEl, null);
+      }
+      if (btnSound && btnSound.parentElement !== actionsCard) {
+        actionsCard.appendChild(btnSound);
+      }
+      actionsCard.classList.remove('hidden');
+
+      if (sideChoiceCard.parentElement !== sidePanel) {
+        sidePanel.insertBefore(sideChoiceCard, historyCard || null);
+      }
+      if (onlineCard.parentElement !== sidePanel) {
+        sidePanel.insertBefore(onlineCard, historyCard || null);
+      }
+      if (onlineActiveViewEl && reactionBar && reactionBar.parentElement !== onlineActiveViewEl) {
+        onlineActiveViewEl.insertBefore(reactionBar, drawOfferBanner || null);
+      }
+    }
+  }
+
   function updateVisibility() {
     const isAI = state.mode === 'ai';
     const isPvpOnline = state.mode === 'pvp' && state.pvpType === 'online';
@@ -1008,6 +1168,7 @@
         b.classList.toggle('active', Number(b.dataset.time) === 600)
       );
     }
+    syncMobileLayout();
   }
 
   // Event Bindings
@@ -1017,7 +1178,7 @@
       if (state.mode === mode) return;
       state.mode = mode;
       document.querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('active', b === btn));
-      if (mode === 'ai' && state.onlineConnected) {
+      if (mode === 'ai' && (state.onlineConnected || online.gameId)) {
         online.leave();
         state.onlineConnected = false;
       }
@@ -1114,8 +1275,17 @@
         b.classList.toggle('active', b.dataset.side === 'w')
       );
     }
+    if (mobileQuery.matches) setMobileDrawerOpen(false);
     startNewGame(false);
   }
+
+  btnMobileMenu?.addEventListener('click', () => {
+    const isOpen = mobileDrawer?.classList.contains('open');
+    setMobileDrawerOpen(!isOpen);
+  });
+  btnMobileClose?.addEventListener('click', () => setMobileDrawerOpen(false));
+  mobileDrawerBackdrop?.addEventListener('click', () => setMobileDrawerOpen(false));
+  mobileQuery.addEventListener?.('change', syncMobileLayout);
 
   document.getElementById('btn-new-game').addEventListener('click', handleNewGameClick);
   document.getElementById('btn-play-again').addEventListener('click', handleNewGameClick);

@@ -1355,6 +1355,57 @@ input {
   transform: translateY(-1px);
 }
 
+.top-bar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.top-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.room-status-dot {
+  display: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--danger);
+  box-shadow: 0 0 10px var(--danger);
+  flex-shrink: 0;
+}
+
+.room-status-dot.waiting {
+  background: var(--warning);
+  box-shadow: 0 0 10px var(--warning);
+  animation: checkPulse 1.2s ease-in-out infinite;
+}
+
+.room-status-dot.connected {
+  background: var(--success);
+  box-shadow: 0 0 10px var(--success);
+}
+
+.room-status-dot.error,
+.room-status-dot.offline {
+  background: var(--danger);
+  box-shadow: 0 0 10px var(--danger);
+}
+
+.mobile-menu-btn,
+.mobile-drawer,
+.mobile-drawer-backdrop,
+.mobile-slot {
+  display: none;
+}
+
+.actions-card.hidden {
+  display: none;
+}
+
 /* Responsive across Tablets, Phones, Small Screens, and Landscape */
 @media (max-width: 960px) {
   .game-layout {
@@ -1375,20 +1426,133 @@ input {
   .move-list {
     max-height: 220px;
   }
+
+  .top-bar {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 10px 14px;
+    gap: 10px;
+    border-radius: 16px;
+  }
+
+  .top-bar-head {
+    width: 100%;
+  }
+
+  .room-status-dot:not(.hidden) {
+    display: inline-block;
+  }
+
+  .mobile-menu-btn {
+    display: inline-flex;
+    padding: 8px 12px;
+    font-size: 0.84rem;
+    flex-shrink: 0;
+  }
+
+  .controls-bar {
+    display: none;
+  }
+
+  .mobile-slot:not(.hidden) {
+    display: block;
+    width: 100%;
+    max-width: 560px;
+    margin: 0 auto;
+  }
+
+  #mobile-reaction-top-slot:not(.hidden) {
+    max-width: var(--board-size);
+    margin: 0 auto;
+  }
+
+  .mobile-drawer-backdrop:not(.hidden) {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(4, 8, 22, 0.58);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    z-index: 55;
+  }
+
+  .mobile-drawer {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: min(86vw, 340px);
+    height: 100dvh;
+    z-index: 60;
+    background: linear-gradient(155deg, rgba(22, 32, 62, 0.92), rgba(10, 15, 32, 0.96));
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border-left: 1px solid var(--border-glass);
+    box-shadow: var(--glass-specular), -18px 0 45px rgba(2, 6, 23, 0.65);
+    transform: translateX(100%);
+    transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .mobile-drawer.open {
+    transform: translateX(0);
+  }
+
+  .mobile-drawer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border-glass-soft);
+  }
+
+  .mobile-drawer-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 16px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .mobile-drawer-body .difficulty-group,
+  .mobile-drawer-body .pvp-type-group,
+  .mobile-drawer-body .time-group,
+  .mobile-drawer-body .theme-group {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .mobile-drawer-body .segmented-control,
+  .mobile-drawer-body .swatch-list {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .mobile-drawer-body .segmented-control .seg-btn {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .mobile-drawer-body .action-btn {
+    width: 100%;
+  }
+
+  /* Compact Undo button inside bottom player bar near timer */
+  .player-bar .action-btn {
+    padding: 5px 9px;
+    font-size: 0.78rem;
+    border-radius: 9px;
+    gap: 4px;
+    flex-shrink: 0;
+  }
 }
 
 @media (max-width: 640px) {
   .app-shell {
     padding: 10px max(10px, env(safe-area-inset-left)) 24px max(10px, env(safe-area-inset-right));
     gap: 12px;
-  }
-
-  .top-bar {
-    flex-direction: column;
-    align-items: stretch;
-    padding: 12px;
-    gap: 12px;
-    border-radius: 16px;
   }
 
   .brand h1 {

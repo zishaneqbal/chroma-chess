@@ -1,150 +1,204 @@
 /**
- * Acoustic Web Audio API sound synthesizer for ChromaChess.
- * Combines filtered noise transients (carved wood / felt slide) with
- * resonant board-body thuds so each piece has a realistic, tactile sound.
+ * Rich Acoustic PCM-WAV Synthesizer for ChromaChess.
+ * Renders 44.1kHz 16-bit WAV clips with carved-wood inharmonic overtones,
+ * felt-slide textures, and distinct per-piece acoustic signatures.
  */
 (function (global) {
-  let audioCtx = null;
-  let masterOut = null;
-  let noiseBuffer = null;
+  const SAMPLE_RATE = 44100;
   let enabled = true;
+  let initialized = false;
+  let keepAliveAudio = null;
+  const clipUrls = {};
 
-  function ensureContext() {
-    if (!enabled) return null;
-    if (!audioCtx && typeof window !== 'undefined') {
-      const Ctx = window.AudioContext || window.webkitAudioContext;
-      if (Ctx) {
-        audioCtx = new Ctx();
-        const masterGain = audioCtx.createGain();
-        masterGain.gain.value = 1.6;
-        const compressor = audioCtx.createDynamicsCompressor();
-        compressor.threshold.setValueAtTime(-12, audioCtx.currentTime);
-        compressor.knee.setValueAtTime(10, audioCtx.currentTime);
-        compressor.ratio.setValueAtTime(5, audioCtx.currentTime);
-        compressor.attack.setValueAtTime(0.002, audioCtx.currentTime);
-        compressor.release.setValueAtTime(0.12, audioCtx.currentTime);
-        masterGain.connect(compressor);
-        compressor.connect(audioCtx.destination);
-        masterOut = masterGain;
+  function encodeWav(samples) {
+    const buffer = new ArrayBuffer(44 + samples.length * 2);
+    const view = new DataView(buffer);
 
-        // Pre-build a 0.25s white-noise buffer for acoustic wood & felt textures
-        const len = Math.floor(audioCtx.sampleRate * 0.25);
-        noiseBuffer = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
-        const data = noiseBuffer.getChannelData(0);
-        for (let i = 0; i < len; i++) {
-          data[i] = Math.random() * 2 - 1;
+    const writeStr = (offset, str) => {
+      for (let i = 0; i < str.length; i++) {
+        view.setUint8(offset + i, str.charCodeAt(i));
+      }
+    };
+
+    writeStr(0, 'RIFF');
+    view.setUint32(4, 36 + samples.length * 2, true);
+    writeStr(8, 'WAVE');
+    writeStr(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, SAMPLE_RATE, true);
+    view.setUint32(28, SAMPLE_RATE * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeStr(36, 'data');
+    view.setUint32(40, samples.length * 2, true);
+
+    for (let i = 0; i < samples.length; i++) {
+      const s = Math.max(-1, Math.min(1, samples[i]));
+      view.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    }
+
+    return URL.createObjectURL(new Blob([buffer], { type: 'audio/wav' }));
+  }
+
+  function renderClip(durationSec, fn) {
+    const len = Math.floor(SAMPLE_RATE * durationSec);
+    const samples = new Float32Array(len);
+    for (let i = 0; i < len; i++) {
+      samples[i] = fn(i / SAMPLE_RATE);
+    }
+    return encodeWav(samples);
+  }
+
+  // Carved-wood knock with fundamental + inharmonic wooden overtones
+  function woodKnock(t, startFreq, endFreq, decay, amp) {
+    if (t < 0) return 0;
+    const freq = endFreq + (startFreq - endFreq) * Math.exp(-t * 42);
+    const attack = Math.min(1, t / 0.0022);
+    const env = attack * Math.exp(-t * decay);
+    const body = Math.sin(2 * Math.PI * freq * t);
+    const overtone1 = Math.sin(2 * Math.PI * freq * 2.13 * t) * Math.exp(-t * decay * 1.6) * 0.35;
+    const overtone2 = Math.sin(2 * Math.PI * freq * 3.41 * t) * Math.exp(-t * decay * 2.4) * 0.16;
+    return (body + overtone1 + overtone2) * env * amp;
+  }
+
+  // Soft felt-base slide texture
+  function feltSlide(t, duration, amp) {
+    if (t < 0 || t > duration) return 0;
+    const env = Math.sin((Math.PI * t) / duration);
+    // Smooth deterministic high-mid texture
+    const tex =
+      Math.sin(2 * Math.PI * 1950 * t) * 0.4 +
+      Math.sin(2 * Math.PI * 2740 * t) * 0.35 +
+      Math.sin(2 * Math.PI * 3580 * t) * 0.25;
+    return tex * env * amp;
+  }
+
+  function chimeTone(t, freq, decay, amp) {
+    if (t < 0) return 0;
+    const env = Math.min(1, t / 0.008) * Math.exp(-t * decay);
+    return (
+      (Math.sin(2 * Math.PI * freq * t) + Math.sin(2 * Math.PI * freq * 2 * t) * 0.22) *
+      env *
+      amp
+    );
+  }
+
+  const PIECE_GENERATORS = {
+    // Pawn: nimble, light, crisp wooden "tock"
+    P: (t) => woodKnock(t, 470, 175, 44, 0.62) + woodKnock(t, 1180, 420, 85, 0.18),
+
+    // Knight: unmistakable two-beat wooden horse-hoof "clip-clop"
+    N: (t) =>
+      woodKnock(t, 340, 130, 46, 0.54) +
+      woodKnock(t - 0.085, 500, 195, 40, 0.64),
+
+    // Bishop: smooth felt-pad diagonal glide into a bright crystalline tap
+    B: (t) =>
+      feltSlide(t, 0.042, 0.12) +
+      woodKnock(t - 0.025, 620, 260, 34, 0.52) +
+      chimeTone(t - 0.025, 1240, 28, 0.12),
+
+    // Rook: deep, heavy, solid stone/hardwood "thunk"
+    R: (t) =>
+      woodKnock(t, 190, 62, 27, 0.7) +
+      woodKnock(t, 98, 45, 22, 0.38),
+
+    // Queen: regal felt sweep + rich dual-octave crown clack + warm shimmer
+    Q: (t) =>
+      feltSlide(t, 0.036, 0.11) +
+      woodKnock(t - 0.018, 390, 140, 30, 0.58) +
+      woodKnock(t - 0.018, 780, 300, 42, 0.26) +
+      chimeTone(t - 0.02, 1174.66, 22, 0.11),
+
+    // King: heavy, weighted-base royal "thud-tock"
+    K: (t) =>
+      woodKnock(t, 230, 78, 26, 0.68) +
+      woodKnock(t, 510, 195, 42, 0.24) +
+      chimeTone(t, 660, 24, 0.09)
+  };
+
+  function buildClips() {
+    if (initialized || typeof Blob === 'undefined' || typeof URL === 'undefined') return;
+    initialized = true;
+
+    // Silent 0.5s WAV to keep Bluetooth TWS A2DP active
+    const silentSamples = new Float32Array(Math.floor(SAMPLE_RATE * 0.5));
+    keepAliveAudio = new Audio(encodeWav(silentSamples));
+    keepAliveAudio.loop = true;
+    keepAliveAudio.volume = 0.01;
+
+    // Move & capture clips per piece
+    for (const [piece, gen] of Object.entries(PIECE_GENERATORS)) {
+      const dur = piece === 'N' ? 0.21 : piece === 'R' || piece === 'K' || piece === 'Q' ? 0.18 : 0.14;
+      clipUrls[piece] = renderClip(dur, gen);
+
+      clipUrls['cap_' + piece] = renderClip(dur + 0.03, (t) =>
+        woodKnock(t, 1450, 320, 72, 0.36) +
+        woodKnock(t, 240, 68, 28, 0.52) +
+        gen(t - 0.014) * 0.78
+      );
+    }
+
+    // Castle: felt slide + King & Rook sequential knocks
+    clipUrls.castle = renderClip(0.24, (t) =>
+      feltSlide(t, 0.04, 0.1) +
+      woodKnock(t - 0.015, 270, 95, 34, 0.58) +
+      woodKnock(t - 0.105, 195, 68, 28, 0.66)
+    );
+
+    // Check: crisp knock + unmistakable two-tone harmonic bell
+    clipUrls.check = renderClip(0.32, (t) =>
+      woodKnock(t, 360, 130, 36, 0.5) +
+      chimeTone(t - 0.012, 880, 13, 0.26) +
+      chimeTone(t - 0.075, 1174.66, 11, 0.26)
+    );
+
+    // Game Over: warm 4-note chord resolution
+    clipUrls.gameover = renderClip(0.58, (t) => {
+      const notes = [
+        [0, 523.25],
+        [0.09, 659.25],
+        [0.18, 783.99],
+        [0.27, 1046.5]
+      ];
+      let sum = 0;
+      for (const [start, freq] of notes) {
+        if (t >= start) {
+          sum += chimeTone(t - start, freq, 7.5, 0.24);
         }
       }
+      return sum;
+    });
+  }
+
+  function ensureKeepAlive() {
+    buildClips();
+    if (enabled && keepAliveAudio && keepAliveAudio.paused) {
+      keepAliveAudio.play().catch(() => {});
     }
-    if (audioCtx && audioCtx.state === 'suspended') {
-      audioCtx.resume().catch(() => {});
-    }
-    return audioCtx;
   }
 
-  function playWoodBurst(centerFreq, q, duration, gainVal, delay = 0, filterType = 'bandpass') {
-    const ctx = ensureContext();
-    if (!ctx || !masterOut || !noiseBuffer) return;
-    const now = ctx.currentTime + delay;
-
-    const src = ctx.createBufferSource();
-    src.buffer = noiseBuffer;
-
-    const filter = ctx.createBiquadFilter();
-    filter.type = filterType;
-    filter.frequency.setValueAtTime(centerFreq, now);
-    filter.Q.setValueAtTime(q, now);
-
-    const gain = ctx.createGain();
-    gain.gain.setValueAtTime(gainVal, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
-
-    src.connect(filter);
-    filter.connect(gain);
-    gain.connect(masterOut);
-
-    src.start(now);
-    src.stop(now + duration + 0.01);
+  if (typeof window !== 'undefined') {
+    const unlock = () => {
+      ensureKeepAlive();
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+    window.addEventListener('pointerdown', unlock, { passive: true });
+    window.addEventListener('keydown', unlock, { passive: true });
   }
 
-  function playBodyThud(startFreq, endFreq, duration, gainVal, delay = 0, wave = 'sine') {
-    const ctx = ensureContext();
-    if (!ctx || !masterOut) return;
-    const now = ctx.currentTime + delay;
-
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = wave;
-    osc.frequency.setValueAtTime(startFreq, now);
-    osc.frequency.exponentialRampToValueAtTime(Math.max(30, endFreq), now + duration);
-
-    gain.gain.setValueAtTime(gainVal, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
-
-    osc.connect(gain);
-    gain.connect(masterOut);
-
-    osc.start(now);
-    osc.stop(now + duration + 0.01);
+  function playClip(key) {
+    if (!enabled || typeof Audio === 'undefined') return;
+    ensureKeepAlive();
+    const url = clipUrls[key] || clipUrls.P;
+    if (!url) return;
+    const audio = new Audio(url);
+    audio.volume = 0.92;
+    audio.play().catch(() => {});
   }
-
-  function playChime(freq, duration, gainVal, delay = 0) {
-    const ctx = ensureContext();
-    if (!ctx || !masterOut) return;
-    const now = ctx.currentTime + delay;
-
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(freq, now);
-
-    gain.gain.setValueAtTime(0.001, now);
-    gain.gain.linearRampToValueAtTime(gainVal, now + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
-
-    osc.connect(gain);
-    gain.connect(masterOut);
-
-    osc.start(now);
-    osc.stop(now + duration + 0.01);
-  }
-
-  const PIECE_PROFILES = {
-    P: () => {
-      // Light, crisp wooden "tock"
-      playWoodBurst(1750, 4.2, 0.032, 0.75, 0);
-      playBodyThud(290, 115, 0.05, 0.36, 0);
-    },
-    N: () => {
-      // Distinctive two-step wooden horse-hoof "clip-clop"
-      playWoodBurst(1250, 3.8, 0.028, 0.68, 0);
-      playBodyThud(240, 95, 0.045, 0.34, 0);
-      playWoodBurst(1600, 4.0, 0.032, 0.78, 0.072);
-      playBodyThud(310, 120, 0.05, 0.38, 0.072);
-    },
-    B: () => {
-      // Smooth felt-pad slide followed by a clean hardwood tap
-      playWoodBurst(2600, 1.8, 0.055, 0.25, 0, 'bandpass');
-      playWoodBurst(2100, 4.5, 0.03, 0.72, 0.028);
-      playBodyThud(320, 130, 0.055, 0.34, 0.028);
-    },
-    R: () => {
-      // Deep, heavy, solid tower "thunk"
-      playWoodBurst(680, 2.8, 0.045, 0.85, 0);
-      playBodyThud(165, 58, 0.085, 0.56, 0, 'triangle');
-    },
-    Q: () => {
-      // Authoritative weighted crown clack + subtle resonant ring
-      playWoodBurst(1150, 3.2, 0.04, 0.82, 0);
-      playWoodBurst(2450, 4.5, 0.025, 0.45, 0.005);
-      playBodyThud(220, 80, 0.075, 0.48, 0);
-    },
-    K: () => {
-      // Heavy, weighted-base royal "thud-tock"
-      playWoodBurst(880, 3.0, 0.042, 0.82, 0);
-      playBodyThud(190, 65, 0.085, 0.52, 0);
-    }
-  };
 
   const ChessSound = {
     isEnabled() {
@@ -152,40 +206,26 @@
     },
     setEnabled(val) {
       enabled = Boolean(val);
+      if (keepAliveAudio) {
+        if (enabled) keepAliveAudio.play().catch(() => {});
+        else keepAliveAudio.pause();
+      }
     },
     playMove(pieceType = 'P') {
-      const fn = PIECE_PROFILES[pieceType] || PIECE_PROFILES.P;
-      fn();
+      playClip(clipUrls[pieceType] ? pieceType : 'P');
     },
     playCapture(pieceType = 'P') {
-      // Sharp two-piece collision snap + heavy board knock + piece texture
-      playWoodBurst(3200, 2.2, 0.035, 0.85, 0);
-      playWoodBurst(850, 2.5, 0.05, 0.75, 0.012);
-      playBodyThud(170, 52, 0.09, 0.55, 0.01, 'triangle');
-      const fn = PIECE_PROFILES[pieceType] || PIECE_PROFILES.P;
-      fn();
+      const key = clipUrls['cap_' + pieceType] ? 'cap_' + pieceType : 'cap_P';
+      playClip(key);
     },
     playCastle() {
-      // Felt slide + two quick solid piece placements (King & Rook)
-      playWoodBurst(2200, 1.5, 0.06, 0.25, 0);
-      playWoodBurst(950, 3.2, 0.04, 0.78, 0.02);
-      playBodyThud(200, 72, 0.07, 0.46, 0.02);
-      playWoodBurst(700, 3.0, 0.045, 0.84, 0.11);
-      playBodyThud(165, 60, 0.08, 0.5, 0.11, 'triangle');
+      playClip('castle');
     },
     playCheck() {
-      // Crisp wooden knock + unmistakable harmonic alert chime
-      playWoodBurst(1400, 3.5, 0.035, 0.65, 0);
-      playBodyThud(240, 90, 0.06, 0.4, 0);
-      playChime(880, 0.18, 0.34, 0.02);
-      playChime(1318.5, 0.22, 0.28, 0.09);
+      playClip('check');
     },
     playGameOver() {
-      // Warm 4-note chord resolution (C5 - E5 - G5 - C6)
-      playChime(523.25, 0.25, 0.34, 0);
-      playChime(659.25, 0.25, 0.34, 0.09);
-      playChime(783.99, 0.28, 0.34, 0.18);
-      playChime(1046.5, 0.45, 0.38, 0.27);
+      playClip('gameover');
     }
   };
 
