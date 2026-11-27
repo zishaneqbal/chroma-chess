@@ -404,7 +404,15 @@ input {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex: 1;
   min-width: 0;
+}
+
+.player-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
 }
 
 .player-avatar {
@@ -446,9 +454,12 @@ input {
   align-items: center;
   flex-wrap: wrap;
   gap: 2px;
-  flex: 1;
-  min-height: 24px;
-  font-size: 0.95rem;
+  margin-top: 3px;
+  font-size: 0.9rem;
+}
+
+.captured-strip:empty {
+  display: none;
 }
 
 .captured-piece-svg {
@@ -1439,17 +1450,34 @@ input {
 
 /* Responsive across Tablets, Phones, Small Screens, and Landscape */
 @media (max-width: 960px) {
+  .app-shell {
+    --board-size: min(100%, calc(100dvh - 165px));
+    padding: 12px 14px 28px;
+    gap: 12px;
+  }
+
+  .top-bar {
+    width: 100%;
+    max-width: var(--board-size);
+    margin: 0 auto;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 10px 14px;
+    gap: 10px;
+    border-radius: 16px;
+  }
+
   .game-layout {
     grid-template-columns: 1fr;
-    gap: 18px;
+    gap: 16px;
   }
 
   .board-stage {
-    --board-size: min(100%, 560px);
+    --board-size: inherit;
   }
 
   .side-panel {
-    max-width: 560px;
+    max-width: var(--board-size);
     width: 100%;
     margin: 0 auto;
   }
@@ -1488,7 +1516,7 @@ input {
   .mobile-slot:not(.hidden) {
     display: block;
     width: 100%;
-    max-width: 560px;
+    max-width: var(--board-size);
     margin: 0 auto;
   }
 
@@ -1578,19 +1606,6 @@ input {
     gap: 4px;
     flex-shrink: 0;
   }
-}
-
-@media (max-width: 640px) {
-  .app-shell {
-    padding: 8px max(10px, env(safe-area-inset-left)) 24px max(10px, env(safe-area-inset-right));
-    gap: 10px;
-  }
-
-  .top-bar {
-    padding: 6px 12px;
-    gap: 0;
-    border-radius: 13px;
-  }
 
   .top-bar.mobile-started {
     background: transparent;
@@ -1620,9 +1635,23 @@ input {
   }
 
   .top-player-row .mobile-menu-btn {
-    padding: 8px 9px;
+    padding: 8px 11px;
     border-radius: 12px;
     align-self: stretch;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-shell {
+    --board-size: min(100%, 96vw, calc(100dvh - 150px));
+    padding: 8px max(10px, env(safe-area-inset-left)) 24px max(10px, env(safe-area-inset-right));
+    gap: 10px;
+  }
+
+  .top-bar {
+    padding: 6px 12px;
+    gap: 0;
+    border-radius: 13px;
   }
 
   .brand {
@@ -1683,7 +1712,6 @@ input {
   }
 
   .board-stage {
-    --board-size: min(100%, 96vw);
     gap: 8px;
   }
 

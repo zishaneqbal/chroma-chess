@@ -98,7 +98,6 @@
 
   // Mobile & Tablet Drawer & Slots (<= 960px)
   const mobileQuery = window.matchMedia('(max-width: 960px)');
-  const phoneQuery = window.matchMedia('(max-width: 640px)');
   const topBarEl = document.querySelector('.top-bar');
   const topBarHeadEl = document.querySelector('.top-bar-head');
   const topBarActionsEl = document.querySelector('.top-bar-actions');
@@ -1048,14 +1047,14 @@
     const isMobile = mobileQuery.matches;
     const isPvpOnline = state.mode === 'pvp' && state.pvpType === 'online';
     const gameStarted = engine.moveList.length > 0 || state.aiThinking;
-    const hideHeaderOnPhone = phoneQuery.matches && gameStarted;
+    const hideHeaderOnSmallScreen = isMobile && gameStarted;
 
     if (topBarEl) {
-      topBarEl.classList.toggle('mobile-started', hideHeaderOnPhone);
-      topBarEl.classList.toggle('ai-mode', hideHeaderOnPhone && state.mode === 'ai');
+      topBarEl.classList.toggle('mobile-started', hideHeaderOnSmallScreen);
+      topBarEl.classList.toggle('ai-mode', hideHeaderOnSmallScreen && state.mode === 'ai');
     }
 
-    if (hideHeaderOnPhone && state.mode === 'ai') {
+    if (hideHeaderOnSmallScreen && state.mode === 'ai') {
       if (topPlayerRow && btnMobileMenu && btnMobileMenu.parentElement !== topPlayerRow) {
         topPlayerRow.appendChild(btnMobileMenu);
       }
@@ -1122,10 +1121,10 @@
         roomStatusDot.classList.toggle('hidden', !isPvpOnline);
       }
 
-      // Quick Reaction Pills -> top row next to menu button on phone once game starts,
-      // or top of board before game starts / on tablet
+      // Quick Reaction Pills -> top row next to menu button on mobile/tablet once game starts,
+      // or top of board before game starts
       if (isPvpOnline && state.onlineConnected) {
-        if (hideHeaderOnPhone && topBarHeadEl && reactionBar) {
+        if (hideHeaderOnSmallScreen && topBarHeadEl && reactionBar) {
           if (reactionBar.parentElement !== topBarHeadEl) {
             topBarHeadEl.insertBefore(reactionBar, topBarActionsEl || null);
           }
@@ -1317,7 +1316,6 @@
   btnMobileClose?.addEventListener('click', () => setMobileDrawerOpen(false));
   mobileDrawerBackdrop?.addEventListener('click', () => setMobileDrawerOpen(false));
   mobileQuery.addEventListener?.('change', syncMobileLayout);
-  phoneQuery.addEventListener?.('change', syncMobileLayout);
 
   document.getElementById('btn-new-game').addEventListener('click', handleNewGameClick);
   document.getElementById('btn-play-again').addEventListener('click', handleNewGameClick);

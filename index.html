@@ -22,7 +22,7 @@
           <div class="brand-logo" aria-hidden="true">♛</div>
           <div class="brand-text">
             <h1>ChromaChess</h1>
-            <p class="brand-sub">Modern Strategy &bull; Play Solo or Local/Online 2P</p>
+            <p class="brand-sub">Modern Strategy &bull; Play Solo or Offline/Online PvP</p>
           </div>
         </div>
         <div class="top-bar-actions">
@@ -112,12 +112,12 @@
           <div class="player-bar" id="top-player-bar">
             <div class="player-identity">
               <span class="player-avatar black-avatar" id="top-avatar">♚</span>
-              <div>
+              <div class="player-info">
                 <div class="player-name" id="top-player-name">Computer (Medium)</div>
                 <div class="player-meta" id="top-player-meta">Black</div>
+                <div class="captured-strip" id="top-captured" aria-label="Captured pieces"></div>
               </div>
             </div>
-            <div class="captured-strip" id="top-captured" aria-label="Captured pieces"></div>
             <div class="player-clock" id="top-clock" aria-label="Top player timer">10:00</div>
             <div class="turn-pill" id="top-turn-pill">Thinking...</div>
           </div>
@@ -158,12 +158,12 @@
         <div class="player-bar" id="bottom-player-bar">
           <div class="player-identity">
             <span class="player-avatar white-avatar" id="bottom-avatar">♔</span>
-            <div>
+            <div class="player-info">
               <div class="player-name" id="bottom-player-name">You</div>
               <div class="player-meta" id="bottom-player-meta">White</div>
+              <div class="captured-strip" id="bottom-captured" aria-label="Captured pieces"></div>
             </div>
           </div>
-          <div class="captured-strip" id="bottom-captured" aria-label="Captured pieces"></div>
           <div class="player-clock" id="bottom-clock" aria-label="Bottom player timer">10:00</div>
           <div class="turn-pill active" id="bottom-turn-pill">Your Turn</div>
         </div>
