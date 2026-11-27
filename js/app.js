@@ -32,7 +32,9 @@
     aiThinking: false,
     gameOver: false,
     aiTimer: null,
-    reactionTimer: null
+    reactionTimer: null,
+    reactionCooldownUntil: 0,
+    reactionCooldownTimer: null
   };
 
   // DOM Elements
@@ -1345,9 +1347,19 @@
   document.querySelectorAll('.react-pill').forEach((btn) => {
     btn.addEventListener('click', () => {
       if (!state.onlineConnected) return;
+      if (Date.now() < state.reactionCooldownUntil) return;
       const text = btn.dataset.react;
       online.send({ type: 'reaction', text });
       showReactionToast(getLocalPlayerName(), text);
+
+      state.reactionCooldownUntil = Date.now() + 5000;
+      const pills = document.querySelectorAll('.react-pill');
+      pills.forEach((p) => { p.disabled = true; });
+      if (state.reactionCooldownTimer) clearTimeout(state.reactionCooldownTimer);
+      state.reactionCooldownTimer = setTimeout(() => {
+        state.reactionCooldownTimer = null;
+        pills.forEach((p) => { p.disabled = false; });
+      }, 5000);
     });
   });
 
