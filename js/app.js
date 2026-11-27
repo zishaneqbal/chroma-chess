@@ -1348,6 +1348,7 @@
     btn.addEventListener('click', () => {
       if (!state.onlineConnected) return;
       if (Date.now() < state.reactionCooldownUntil) return;
+      btn.blur();
       const text = btn.dataset.react;
       online.send({ type: 'reaction', text });
       showReactionToast(getLocalPlayerName(), text);

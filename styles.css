@@ -677,10 +677,18 @@ input {
   transition: all 0.16s ease;
 }
 
-.react-pill:hover:not(:disabled) {
+@media (hover: hover) and (pointer: fine) {
+  .react-pill:hover:not(:disabled) {
+    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+    color: #fff;
+    transform: translateY(-1px);
+  }
+}
+
+.react-pill:active:not(:disabled) {
   background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
   color: #fff;
-  transform: translateY(-1px);
+  transform: scale(0.97);
 }
 
 .react-pill:disabled {
