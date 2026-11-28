@@ -1,47 +1,74 @@
-# ChromaChess
+<div align="center">
 
-A Chess web application built with **HTML, CSS, and JavaScript** featuring Single Player AI (3 difficulty levels) and 2-Player Offline & Online Real-Time Multiplayer.
+# ♛ ChromaChess
 
-# Quick play
-- [Link](https://chroma-chess.vercel.app/)
+**A modern Liquid Glass Chess web app with 3-level AI, real-time Game ID multiplayer, live WebRTC voice chat, and custom acoustic piece audio.**
 
-## Features
+[![Play Online](https://img.shields.io/badge/▶_Play_Online-chroma--chess.vercel.app-38BDF8?style=for-the-badge)](https://chroma-chess.vercel.app/)
 
-- **Single Player (vs Computer)**:
-  - **Easy**, **Medium**, and **Hard** difficulty levels powered by Minimax + Alpha-Beta pruning, Piece-Square Tables, a curated **Opening Book** (Medium/Hard), and **Quiescence Search** (Hard).
-  - Difficulty is locked once the first move is played (click **New Game** to change it).
-  - Choose to play as **White** or **Black**, with **Undo** support.
-- **2-Player Multiplayer**:
-  - **Offline (Same Device)**: Pass-and-play on one screen.
-  - **Online (Different Devices)**: Enter your **player name**, create a **Game ID** (with one-click copy), and share it with a friend to connect and sync moves, names, clocks, and rematches in real time via WebRTC (`PeerJS`) — no backend server required.
-  - **Live Voice Chat (Online Mode)**: Built-in WebRTC **Mic** and **Speaker** toggle buttons to talk with your opponent while playing (requires HTTPS or `localhost`).
-  - **Quick Reactions & Match Controls (Online Mode)**: Send quick-reaction pills (`Good move! 👏🏻`, `Nice! 👍`, `Okay, Wait a sec 😤`, `Hahahah 🤣`), **Offer Draw** (Accept/Decline), or **Resign**.
-  - Undo is hidden in 2-Player modes.
-- **Selectable Time Controls**:
-  - **vs Computer**: **3m**, **5m**, **10m**, or **Off** (timer applies to the human player only).
-  - **2 Players**: **5m**, **10m**, **15m**, or **Off** (synced in real time in Online mode).
-  - Timer is locked once the game begins; if a player's clock expires, the player who lost the **fewest chess pieces** wins (or **Draw** if equal).
-- **Complete Chess Rules**:
-  - Castling (kingside & queenside), En Passant, Pawn Promotion (Queen, Rook, Bishop, Knight), Check, Checkmate, Stalemate, 50-move rule, Insufficient Material, and Threefold Repetition, with clear draw-reason descriptions.
-- **Liquid Glass UI, Animations & Cross-Device Support**:
-  - Translucent **Liquid Glass** styling with animated ambient glow orbs and 4 selectable board themes (**Neon Ocean**, **Sunset Coral**, **Emerald Forest**, **Royal Violet**).
-  - 3D-shaded inline SVG chess pieces with smooth slide animations between squares, crisp inline SVG UI icons, click-to-move & drag-and-drop, Checkmate confetti animation, move history in Standard Algebraic Notation (SAN), captured pieces with material advantage, board flip, and distinct Web Audio sound effects per chess piece.
-  - Automatic `sessionStorage` recovery for unfinished AI, Offline, and Online games (auto-reconnecting to the same Game ID and syncing board state on refresh).
-  - Fully responsive layout that scales smoothly across **desktops, laptops, tablets, and mobile phones** (portrait and landscape) with touch-optimized controls.
+![HTML5](https://img.shields.io/badge/HTML5-E34F26?style=for-the-badge&logo=html5&logoColor=white)
+![CSS3](https://img.shields.io/badge/CSS3-1572B6?style=for-the-badge&logo=css3&logoColor=white)
+![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)
+![WebRTC](https://img.shields.io/badge/WebRTC-PeerJS-333333?style=for-the-badge&logo=webrtc&logoColor=white)
+![Zero Backend](https://img.shields.io/badge/Backend-Zero%20Server-34D399?style=for-the-badge)
 
-## Project Structure
+</div>
+
+---
+
+## ✨ Highlights
+
+### 🤖 Single Player (`vs Computer`)
+- **3 Difficulty Levels**:
+  - **Easy** — Casual beginner play with light tactical awareness.
+  - **Medium** — Curated **Opening Book** + Depth-2 Alpha-Beta search with Piece-Square Tables.
+  - **Hard** — Curated **Opening Book** + Depth-3 Alpha-Beta search + **Quiescence Search** on captures.
+- **Play As White or Black**: Choose your side before the first move; **Play As** and **Difficulty** lock once the game starts (click **New Game** to reset and switch).
+- **Smart Undo**: Available in Computer mode (protects AI's opening White move when playing as Black).
+
+### 🌐 2-Player Multiplayer (`Offline` & `Online`)
+- **Offline (Same Device)**: Pass-and-play on a single screen.
+- **Online (Cross-Device via Game ID)**:
+  - Enter your **player name**, generate a 6-character **Game ID** (one-click copy), and share it with a friend.
+  - Real-time peer-to-peer sync via **WebRTC (`PeerJS`)** — **no backend server required**.
+  - **Live Voice Chat**: Built-in **Mic** & **Speaker** toggles over WebRTC *(requires HTTPS or `localhost`)*.
+  - **Quick Reactions**: Send reactions (`Good move! 👏🏻`, `Nice! 👍`, `Okay, Wait a sec 😤`, `Hahahah 🤣`) with a 5-second cooldown.
+  - **Match Controls**: **Offer Draw** (Accept/Decline banner) and **Resign** support.
+
+### ⏱️ Time Controls & Rules
+| Mode | Timer Options | Notes |
+| :--- | :--- | :--- |
+| **vs Computer** | `3m` · `5m` · `10m` · `Off` | Timer applies to the human player only |
+| **2 Players** | `5m` · `10m` · `15m` · `Off` | Synced in real time in Online mode |
+
+- **Timeout Tiebreak**: When a player's clock hits `00:00`, the player who lost the **fewest chess pieces** wins (or **Draw** if equal).
+- **Full Chess Rules**: Castling (kingside & queenside), En Passant, Pawn Promotion (`Q / R / B / N`), Check, Checkmate, Stalemate, 50-Move Rule, Insufficient Material, and Threefold Repetition.
+
+### 🎨 Liquid Glass UI, Audio & Responsiveness
+- **Liquid Glass Design**: Frosted translucent panels with specular rims, animated ambient orbs, and **4 board themes** (**Neon Ocean**, **Sunset Coral**, **Emerald Forest**, **Royal Violet**).
+- **3D Pieces & Animations**: 3D-shaded inline SVG pieces with smooth slide transitions between squares, captured pieces displayed under each player's name, and a **Checkmate confetti** celebration.
+- **44.1kHz PCM-WAV Piece Audio**: Distinct carved-wood & felt-slide sound effects per piece (`P`, `N`, `B`, `R`, `Q`, `K`), captures, castling, check, and game over — played through HTML5 `<audio>` with a silent keep-alive loop for reliable **Bluetooth TWS earbud** playback.
+- **Session Recovery**: Automatically saves and restores unfinished **AI**, **Offline**, and **Online** games (including auto-reconnecting to the same Game ID) on refresh via `sessionStorage`.
+- **Responsive Mobile & Tablet Layout**: Dedicated right slide-out **Menu** drawer, compact in-game header, and full-width board/bar alignment across phones, tablets, and desktops.
+
+---
+
+## 📁 Project Structure
 
 ```text
 chess/
 ├── .gitignore        # Git ignore rules
-├── index.html        # App layout and modals
+├── LICENSE           # Project license
+├── README.md         # Project documentation
+├── index.html        # App layout, modals, and mobile/tablet drawer
 ├── styles.css        # Liquid Glass styling, themes, and responsive breakpoints
-├── README.md         # Documentation
 └── js/
-    ├── engine.js     # Complete chess rules engine
+    ├── engine.js     # Complete chess rules engine & SAN generator
     ├── ai.js         # 3-level AI with opening book & quiescence search
-    ├── online.js     # WebRTC (PeerJS) real-time room & voice chat sync
+    ├── online.js     # WebRTC (PeerJS) room sync & voice chat manager
     ├── pieces.js     # 3D-shaded inline SVG chess pieces
-    ├── sound.js      # Piece-specific Web Audio API sound effects
+    ├── sound.js      # 44.1kHz PCM-WAV per-piece audio synthesizer
     └── app.js        # UI controller, timers, animations, and session recovery
 ```
+
+---
