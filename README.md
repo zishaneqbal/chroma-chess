@@ -2,6 +2,9 @@
 
 A Chess web application built with **HTML, CSS, and JavaScript** featuring Single Player AI (3 difficulty levels) and 2-Player Offline & Online Real-Time Multiplayer.
 
+# Quick play
+- [Link](https://chroma-chess.vercel.app/)
+
 ## Features
 
 - **Single Player (vs Computer)**:
